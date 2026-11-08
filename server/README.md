@@ -91,3 +91,38 @@ JELLYFIN_SERVER_URL=http://localhost:8096 JELLYFIN_API_KEY=... npm run dev
 Vite dev server proxies `/api` to `http://localhost:3000` (override with
 `WRAPPED_SERVER_URL`), so run `npm run dev` in the repo root without `VITE_JELLYFIN_API_KEY`
 set.
+
+## Permanent archive
+
+The server keeps its own copy of everything Wrapped needs in `ARCHIVE_DIR`
+(`archive.sqlite` plus an `images/` folder), so a year's Wrapped still includes:
+
+- plays the Playback Reporting plugin has deleted because of its retention setting
+- movies, episodes and music that were deleted from Jellyfin (or replaced by a new
+  file, which gives them a new id)
+
+How it works:
+
+| Job | When | What it does |
+| --- | --- | --- |
+| Plays | at start, every `PLAY_SYNC_MINUTES` (15), and before serving a user if older than a minute | Copies new plugin rows in. Items those plays refer to are archived immediately, with their season, show or album. |
+| Library | at start and every `LIBRARY_SYNC_MINUTES` (60) | Reads every library, records which users can open which library, and marks items that disappeared as deleted. |
+| Posters | after each pass | Saves Jellyfin's poster for every played item (and its show/season/album) and every movie and show. |
+
+Items deleted before the archive existed are rebuilt from the plugin's play rows
+(episodes are attached to their show if the show is still known). Their posters are
+found on request: Jellyfin first, then TMDB (`TMDB_API_KEY`, optional), TVmaze for
+shows, and Cover Art Archive for music. Lookups that find nothing are retried after a
+week.
+
+Endpoints (all require the user's own Jellyfin token, and only return items the user
+can see: items in libraries they can open, or items they played):
+
+- `POST /api/items` `{"ids": [...]}`: archived copies of items Jellyfin no longer has
+- `GET /api/library-additions?start=YYYY-MM-DD&end=YYYY-MM-DD`: items added in a range,
+  with `Deleted` and `Played`
+- `GET /api/image/<id>`: poster
+- `GET /api/archive/status`: counts of archived plays, items, deleted items and posters
+
+Back up `ARCHIVE_DIR`. It is the only copy of anything that has since been deleted.
+Requires Node 22.13 or newer (uses the built-in `node:sqlite`).

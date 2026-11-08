@@ -1,9 +1,61 @@
 import { getUserLibraryApi, getItemsApi } from "@jellyfin/sdk/lib/utils/api";
 import { getAuthenticatedJellyfinApi } from "../jellyfin-api";
 import { getCacheValue, setCacheValue, getCachedHiddenIds } from "../cache";
-import { getCurrentUserId } from "./utils";
+import { getCurrentUserId, isServerMode, serverFetch } from "./utils";
 import { SimpleItemDto } from "./types";
 import { BaseItemDto } from "@jellyfin/sdk/lib/generated-client";
+
+const toSimpleItem = (item: BaseItemDto): SimpleItemDto => ({
+  id: item.Id,
+  parentId: item.ParentId,
+  name: item.Name,
+  productionYear: item.ProductionYear,
+  communityRating: item.CommunityRating,
+  people: item.People,
+  date: item.PremiereDate,
+  genres: item.Genres,
+  genreItems: item.GenreItems,
+  durationSeconds: Math.floor((item.RunTimeTicks ?? 0) / 10000000),
+});
+
+const ARCHIVE_BATCH = 500;
+
+/**
+ * Items Jellyfin no longer has (deleted, or replaced by a new file) still exist in the
+ * backend's archive. Only available in server mode; returns nothing otherwise.
+ */
+const getArchivedItems = async (ids: string[]): Promise<SimpleItemDto[]> => {
+  if (ids.length === 0 || !isServerMode()) return [];
+  const out: SimpleItemDto[] = [];
+  for (let i = 0; i < ids.length; i += ARCHIVE_BATCH) {
+    try {
+      const res = await serverFetch("/api/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: ids.slice(i, i + ARCHIVE_BATCH) }),
+      });
+      if (!res.ok) continue;
+      const data = (await res.json()) as { Items?: BaseItemDto[] };
+      for (const item of data.Items ?? []) {
+        const simple = toSimpleItem(item);
+        setCacheValue(`item_${item.Id}`, JSON.stringify(simple));
+        out.push(simple);
+      }
+    } catch {
+      console.debug("Archive lookup failed");
+    }
+  }
+  return out;
+};
+
+const withArchived = async (
+  requested: string[],
+  found: SimpleItemDto[]
+): Promise<SimpleItemDto[]> => {
+  const have = new Set(found.map((i) => i.id));
+  const missing = requested.filter((id) => !have.has(id));
+  return [...found, ...(await getArchivedItems(missing))];
+};
 
 export const getItemDtosByIds = async (
   ids: string[]
@@ -66,8 +118,7 @@ export const getItemDtosByIds = async (
 
       for (const response of responses) {
         const batchItems: SimpleItemDto[] = (
-          ((response as { data: { Items?: BaseItemDto[] } }).data.Items ??
-            []) as BaseItemDto[]
+          (response as { data: { Items?: BaseItemDto[] } }).data.Items ?? []
         ).map((item: BaseItemDto) => {
           const ticks = item.RunTimeTicks ?? 0;
           const durationSeconds = Math.floor(ticks / 10000000);
@@ -89,11 +140,11 @@ export const getItemDtosByIds = async (
           return simpleItem;
         });
 
-        fetchedItems.push(...(batchItems as SimpleItemDto[]));
+        fetchedItems.push(...batchItems);
       }
     }
 
-    return [...cachedItems, ...fetchedItems];
+    return [...cachedItems, ...(await withArchived(uncachedIds, fetchedItems))];
   } catch {
     console.debug(`Batch fetch failed, falling back to individual requests`);
 
@@ -127,7 +178,10 @@ export const getItemDtosByIds = async (
     const fetchedItems = await Promise.all(itemPromises);
     return [
       ...cachedItems,
-      ...fetchedItems.filter((item): item is SimpleItemDto => item !== null),
+      ...(await withArchived(
+        uncachedIds,
+        fetchedItems.filter((item): item is SimpleItemDto => item !== null)
+      )),
     ];
   }
 };

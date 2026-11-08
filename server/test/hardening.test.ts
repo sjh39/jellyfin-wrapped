@@ -113,6 +113,10 @@ describe("limits on the running server", () => {
       maxConcurrentLoads: 3,
       authFailLimitPerMinute: 1000,
       trustProxyHops: 0,
+      archiveDir: ":memory:",
+      playSyncMs: 60000,
+      librarySyncMs: 600000,
+      tmdbApiKey: undefined,
       ...overrides,
     };
     const app: App = createApp({

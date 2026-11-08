@@ -1,9 +1,15 @@
 import { getItemsApi } from "@jellyfin/sdk/lib/utils/api";
 import { BaseItemDto } from "@jellyfin/sdk/lib/generated-client";
-import { addDays, isSameDay } from "date-fns";
 import { getAuthenticatedJellyfinApi } from "../jellyfin-api";
 import { getCachedHiddenIds } from "../cache";
-import { getCurrentUserId, getStartDate, getEndDate } from "./utils";
+import { addDays, format, isSameDay } from "date-fns";
+import {
+  getCurrentUserId,
+  getStartDate,
+  getEndDate,
+  isServerMode,
+  serverFetch,
+} from "./utils";
 import { SimpleItemDto } from "./types";
 
 export type NewLibraryItem = {
@@ -11,6 +17,43 @@ export type NewLibraryItem = {
   item: SimpleItemDto;
   // When Jellyfin added the item to the library (the item's DateCreated).
   addedAt: Date;
+  // No longer on the server (known from the backend's archive, server mode only).
+  deleted?: boolean;
+};
+
+type ArchivedAddition = BaseItemDto & { Deleted?: boolean };
+
+// Server mode: the backend's archive remembers everything that was ever added,
+// including items deleted from Jellyfin since.
+const listArchivedNewThisYear = async (
+  startDate: Date,
+  upperBound: Date
+): Promise<NewLibraryItem[]> => {
+  const start = format(startDate, "yyyy-MM-dd");
+  const end = format(addDays(upperBound, 1), "yyyy-MM-dd");
+  const res = await serverFetch(
+    `/api/library-additions?start=${start}&end=${end}`
+  );
+  if (!res.ok) {
+    throw new Error(`Library additions request failed (${res.status})`);
+  }
+  const data = (await res.json()) as { Items?: ArchivedAddition[] };
+  const hiddenIds = getCachedHiddenIds();
+  return (data.Items ?? [])
+    .filter(
+      (dto) =>
+        (dto.Type === "Movie" || dto.Type === "Series") &&
+        dto.Id &&
+        dto.DateCreated &&
+        !hiddenIds.includes(dto.Id)
+    )
+    .map((dto) => ({
+      kind: dto.Type === "Series" ? ("show" as const) : ("movie" as const),
+      item: toSimpleItemDto(dto),
+      addedAt: new Date(dto.DateCreated ?? ""),
+      deleted: !!dto.Deleted,
+    }))
+    .sort((a, b) => a.addedAt.getTime() - b.addedAt.getTime());
 };
 
 const toSimpleItemDto = (item: BaseItemDto): SimpleItemDto => ({
@@ -38,6 +81,8 @@ export const listNewThisYear = async (): Promise<NewLibraryItem[]> => {
   const upperBound = isSameDay(endDate, new Date())
     ? addDays(endDate, 1)
     : endDate;
+
+  if (isServerMode()) return listArchivedNewThisYear(startDate, upperBound);
 
   const response = await getItemsApi(api).getItems({
     userId,

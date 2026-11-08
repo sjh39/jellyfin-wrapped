@@ -6,6 +6,10 @@ const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 const TYPE_PATTERN = /^[A-Za-z]+(\([0-9, ]+\))?$/;
 const VERIFY_TIMEOUT_MS = 5000;
 const PLUGIN_TIMEOUT_MS = 60000;
+const ADMIN_TIMEOUT_MS = 60000;
+const IMAGE_TIMEOUT_MS = 20000;
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const PLUGIN_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}( [0-9:.]+)?$/;
 const TOKEN_TTL_MS = 60 * 1000;
 const MAX_TOKEN_ENTRIES = 500;
 
@@ -16,6 +20,40 @@ export class UpstreamError extends Error {
     this.name = "UpstreamError";
     this.status = status;
   }
+}
+
+export interface FetchedImage {
+  bytes: Buffer;
+  contentType: string;
+}
+
+/** Fetch an image, refusing anything that is not an image or is too large. */
+export async function fetchImageBytes(
+  fetchImpl: typeof fetch,
+  url: string,
+  headers: Record<string, string> = {}
+): Promise<FetchedImage | null> {
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      headers,
+      signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+  const contentType = (
+    (response.headers.get("content-type") ?? "").split(";")[0] ?? ""
+  )
+    .trim()
+    .toLowerCase();
+  if (!/^image\/(jpeg|png|webp|gif|avif)$/.test(contentType)) return null;
+  const length = Number(response.headers.get("content-length") ?? 0);
+  if (length > MAX_IMAGE_BYTES) return null;
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) return null;
+  return { bytes, contentType };
 }
 
 export interface JellyfinUser {
@@ -238,5 +276,61 @@ export class JellyfinClient {
       columns: names.map((name) => ({ name, type: types.get(name) ?? "" })),
       rows: response.results,
     };
+  }
+
+  /** Every play recorded on or after the given plugin timestamp (all users), or all plays. */
+  async fetchActivitySince(since: string | null): Promise<ActivityData> {
+    if (since !== null && !PLUGIN_DATE_PATTERN.test(since))
+      throw new TypeError("Invalid timestamp");
+    const schema = await this.getSchema();
+    const where = since === null ? "" : ` WHERE DateCreated >= '${since}'`;
+    const response = await this.pluginQuery(
+      `SELECT ROWID AS __rowid, * FROM PlaybackActivity${where} ORDER BY ROWID`
+    );
+    const names =
+      response.colums.length > 0
+        ? response.colums.slice(1)
+        : schema.map((c) => c.name);
+    for (const name of names) {
+      if (!IDENTIFIER_PATTERN.test(name))
+        throw new UpstreamError(
+          "Playback reporting plugin returned an unexpected column"
+        );
+    }
+    const types = new Map(schema.map((c) => [c.name, c.type]));
+    return {
+      columns: names.map((name) => ({ name, type: types.get(name) ?? "" })),
+      rows: response.results,
+    };
+  }
+
+  /** GET a Jellyfin endpoint with the admin key and parse the JSON. */
+  async adminGet<T>(path: string): Promise<T> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.config.jellyfinUrl}${path}`, {
+        headers: authHeaders(this.config.apiKey),
+        signal: AbortSignal.timeout(ADMIN_TIMEOUT_MS),
+      });
+    } catch {
+      throw new UpstreamError(`Could not reach Jellyfin (${path.split("?")[0]})`);
+    }
+    if (!response.ok) {
+      throw new UpstreamError(
+        `Jellyfin returned ${response.status} for ${path.split("?")[0]}`,
+        response.status === 404 ? 404 : 502
+      );
+    }
+    return (await response.json()) as T;
+  }
+
+  /** The item's primary image as Jellyfin has it right now, or null. */
+  fetchPrimaryImage(itemId: string): Promise<FetchedImage | null> {
+    if (!isGuid(itemId)) return Promise.resolve(null);
+    return fetchImageBytes(
+      this.fetchImpl,
+      `${this.config.jellyfinUrl}/Items/${itemId}/Images/Primary?maxWidth=400&quality=90`,
+      authHeaders(this.config.apiKey)
+    );
   }
 }

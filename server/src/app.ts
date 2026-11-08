@@ -1,6 +1,9 @@
 import http from "node:http";
 import type { Config } from "./config.js";
-import { JellyfinClient, UpstreamError } from "./jellyfin.js";
+import { JellyfinClient, UpstreamError, isGuid, type JellyfinUser } from "./jellyfin.js";
+import type { Archive } from "./archive.js";
+import type { ImageStore } from "./images.js";
+import type { Syncer } from "./sync.js";
 import { UserDbCache } from "./cache.js";
 import {
   ConcurrencyGate,
@@ -18,6 +21,17 @@ import {
 
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_QUERY_CHARS = 20000;
+const MAX_ITEM_IDS = 500;
+/** Plays are re-synced before serving a user if the last sync is older than this. */
+const FRESH_PLAYS_MS = 60 * 1000;
+const DATE_PARAM = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The permanent archive. Optional so the server still runs (and tests) without it. */
+export interface ArchiveServices {
+  archive: Archive;
+  images: ImageStore;
+  syncer: Syncer;
+}
 
 class HttpError extends Error {
   constructor(
@@ -97,12 +111,31 @@ export interface App {
   close(): Promise<void>;
 }
 
+function sendImage(
+  res: http.ServerResponse,
+  bytes: Buffer,
+  contentType: string
+): void {
+  res.writeHead(200, {
+    "Content-Type": contentType,
+    "Content-Length": bytes.length,
+    "Cache-Control": "private, max-age=86400",
+    "X-Content-Type-Options": "nosniff",
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Content-Security-Policy": "default-src 'none'",
+    "Referrer-Policy": "no-referrer",
+  });
+  res.end(bytes);
+}
+
 export function createApp({
   config,
   jellyfin,
+  archive,
 }: {
   config: Config;
   jellyfin: JellyfinClient;
+  archive?: ArchiveServices;
 }): App {
   // Loading a user's data is the expensive step. Many cold users at once would pile up
   // on the Jellyfin plugin and on memory, so only a few load at the same time.
@@ -110,7 +143,7 @@ export function createApp({
   const cache = new UserDbCache(
     (userId) =>
       loads.run(async () =>
-        UserDb.create(await jellyfin.fetchUserActivity(userId), {
+        UserDb.create(await loadActivity(userId), {
           maxRows: config.maxResultRows,
           maxBytes: config.maxResultBytes,
           memoryLimitMb: config.queryMemoryLimitMb,
@@ -119,17 +152,30 @@ export function createApp({
     config.cacheTtlMs,
     config.maxCachedUsers
   );
+  // With the archive, a user's history comes from it (so plays the plugin has since
+  // deleted are still there). Without it, straight from the plugin as before.
+  async function loadActivity(userId: string) {
+    if (!archive) return jellyfin.fetchUserActivity(userId);
+    try {
+      await archive.syncer.syncPlaysIfStale(FRESH_PLAYS_MS);
+    } catch {
+      // Serve what is archived even if Jellyfin is briefly unreachable.
+    }
+    return archive.archive.userActivity(userId);
+  }
+
   const userLimiter = new RateLimiter(config.rateLimitPerMinute);
+  // Posters are many small requests; keep them from using up the query allowance.
+  const imageLimiter = new RateLimiter(config.rateLimitPerMinute * 4);
   const authFailLimiter = new RateLimiter(config.authFailLimitPerMinute);
   const gate = new ConcurrencyGate(
     config.maxInflightPerUser,
     config.maxQueuedPerUser
   );
 
-  async function handlePlaybackReport(
-    req: http.IncomingMessage,
-    res: http.ServerResponse
-  ): Promise<void> {
+  async function authenticate(
+    req: http.IncomingMessage
+  ): Promise<{ ip: string; user: JellyfinUser }> {
     const ip = clientIp(req, config.trustProxyHops);
 
     const token = bearerToken(req);
@@ -152,6 +198,93 @@ export function createApp({
         token ? "Invalid or expired session" : "Authentication required"
       );
     }
+    return { ip, user };
+  }
+
+  function requireArchive(): ArchiveServices {
+    if (!archive) throw new HttpError(404, "Archive is not enabled");
+    return archive;
+  }
+
+  async function authenticateLimited(
+    req: http.IncomingMessage,
+    limiter: RateLimiter
+  ): Promise<JellyfinUser> {
+    const { ip, user } = await authenticate(req);
+    const waitSeconds = limiter.hit(user.id);
+    if (waitSeconds > 0) {
+      logEvent("rate_limited", { ip, user: user.id });
+      throw new HttpError(429, "Too many requests", waitSeconds);
+    }
+    return user;
+  }
+
+  /** POST /api/items {"ids": [...]} -> archived copies of items Jellyfin no longer has. */
+  async function handleItems(
+    req: http.IncomingMessage,
+    res: http.ServerResponse
+  ): Promise<void> {
+    const services = requireArchive();
+    const user = await authenticateLimited(req, userLimiter);
+    let ids: unknown;
+    try {
+      ids = (JSON.parse(await readBody(req)) as { ids?: unknown } | null)?.ids;
+    } catch {
+      throw new HttpError(400, "Body must be JSON");
+    }
+    if (
+      !Array.isArray(ids) ||
+      ids.length > MAX_ITEM_IDS ||
+      !ids.every((id) => isGuid(id))
+    ) {
+      throw new HttpError(400, `Body must be {"ids": [up to ${MAX_ITEM_IDS} item ids]}`);
+    }
+    sendJson(res, 200, {
+      Items: services.archive.itemsForUser(user.id, ids as string[]),
+    });
+  }
+
+  /** GET /api/library-additions?start=YYYY-MM-DD&end=YYYY-MM-DD (end exclusive) */
+  async function handleAdditions(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    url: URL
+  ): Promise<void> {
+    const services = requireArchive();
+    const user = await authenticateLimited(req, userLimiter);
+    const start = url.searchParams.get("start") ?? "";
+    const end = url.searchParams.get("end") ?? "";
+    if (!DATE_PARAM.test(start) || !DATE_PARAM.test(end)) {
+      throw new HttpError(400, "start and end must be YYYY-MM-DD");
+    }
+    sendJson(res, 200, {
+      Items: services.archive.additionsForUser(user.id, start, end),
+    });
+  }
+
+  /** GET /api/image/<id> -> saved poster, found again from Jellyfin or outside if needed. */
+  async function handleImage(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    id: string
+  ): Promise<void> {
+    const services = requireArchive();
+    const user = await authenticateLimited(req, imageLimiter);
+    if (!isGuid(id)) throw new HttpError(400, "Invalid id");
+    const normalized = id.replace(/-/g, "").toLowerCase();
+    if (!services.archive.canUserSee(user.id, normalized)) {
+      throw new HttpError(404, "No image");
+    }
+    const image = await services.images.get(normalized);
+    if (!image) throw new HttpError(404, "No image");
+    sendImage(res, image.bytes, image.contentType);
+  }
+
+  async function handlePlaybackReport(
+    req: http.IncomingMessage,
+    res: http.ServerResponse
+  ): Promise<void> {
+    const { ip, user } = await authenticate(req);
 
     const waitSeconds = userLimiter.hit(user.id);
     if (waitSeconds > 0) {
@@ -176,7 +309,8 @@ export function createApp({
   }
 
   const server = http.createServer((req, res) => {
-    const path = new URL(req.url ?? "/", "http://localhost").pathname;
+    const url = new URL(req.url ?? "/", "http://localhost");
+    const path = url.pathname;
 
     const run = async (): Promise<void> => {
       if (path === "/api/health") {
@@ -189,6 +323,32 @@ export function createApp({
         if (req.method !== "POST")
           throw new HttpError(405, "Method not allowed");
         await handlePlaybackReport(req, res);
+        return;
+      }
+      if (path === "/api/items") {
+        if (req.method !== "POST")
+          throw new HttpError(405, "Method not allowed");
+        await handleItems(req, res);
+        return;
+      }
+      if (path === "/api/library-additions") {
+        if (req.method !== "GET")
+          throw new HttpError(405, "Method not allowed");
+        await handleAdditions(req, res, url);
+        return;
+      }
+      if (path.startsWith("/api/image/")) {
+        if (req.method !== "GET")
+          throw new HttpError(405, "Method not allowed");
+        await handleImage(req, res, path.slice("/api/image/".length));
+        return;
+      }
+      if (path === "/api/archive/status") {
+        if (req.method !== "GET")
+          throw new HttpError(405, "Method not allowed");
+        const services = requireArchive();
+        await authenticateLimited(req, userLimiter);
+        sendJson(res, 200, services.archive.stats());
         return;
       }
       throw new HttpError(404, "Not found");
@@ -228,6 +388,7 @@ export function createApp({
     close: () =>
       new Promise<void>((resolve) => {
         cache.closeAll();
+        archive?.syncer.stop();
         server.close(() => resolve());
         server.closeAllConnections();
       }),

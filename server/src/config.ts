@@ -30,6 +30,14 @@ export interface Config {
   authFailLimitPerMinute: number;
   /** Number of reverse proxies in front of this server (0 = none, use the socket address). */
   trustProxyHops: number;
+  /** Where the permanent archive (database and saved posters) lives. */
+  archiveDir: string;
+  /** How often new plays are copied into the archive. */
+  playSyncMs: number;
+  /** How often every library is re-read (this is what notices deleted items). */
+  librarySyncMs: number;
+  /** Optional TMDB key (v3 key or v4 read token) for finding posters of deleted items. */
+  tmdbApiKey: string | undefined;
 }
 
 function intFromEnv(
@@ -72,6 +80,21 @@ function readApiKey(
   return contents.trim() || undefined;
 }
 
+/** A secret from NAME, or from the file named by NAME_FILE. Optional. */
+function readOptionalSecret(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  readFile: (path: string) => string
+): string | undefined {
+  const file = env[`${name}_FILE`];
+  if (!file) return env[name] || undefined;
+  try {
+    return readFile(file).trim() || undefined;
+  } catch {
+    throw new Error(`Cannot read ${name}_FILE (${file})`);
+  }
+}
+
 export function loadConfig(
   env: NodeJS.ProcessEnv = process.env,
   readFile: (path: string) => string = (path) => readFileSync(path, "utf8")
@@ -112,5 +135,10 @@ export function loadConfig(
       100000
     ),
     trustProxyHops: intFromEnv(env, "TRUST_PROXY_HOPS", 0, 0, 10),
+    archiveDir: env.ARCHIVE_DIR || "./data",
+    playSyncMs: intFromEnv(env, "PLAY_SYNC_MINUTES", 15, 1, 1440) * 60 * 1000,
+    librarySyncMs:
+      intFromEnv(env, "LIBRARY_SYNC_MINUTES", 60, 5, 10080) * 60 * 1000,
+    tmdbApiKey: readOptionalSecret(env, "TMDB_API_KEY", readFile),
   };
 }

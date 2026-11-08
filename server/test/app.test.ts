@@ -39,6 +39,10 @@ describe("playback report proxy", () => {
       maxConcurrentLoads: 3,
       authFailLimitPerMinute: 1000,
       trustProxyHops: 0,
+      archiveDir: ":memory:",
+      playSyncMs: 60000,
+      librarySyncMs: 600000,
+      tmdbApiKey: undefined,
     };
     app = createApp({ config, jellyfin: new JellyfinClient(config) });
     await new Promise<void>((resolve) =>

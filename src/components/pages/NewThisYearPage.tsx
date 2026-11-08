@@ -59,6 +59,7 @@ function AddedSection({
               }}
             >
               Added {format(entry.addedAt, "MMM d, yyyy")}
+              {entry.deleted ? " · since removed" : ""}
             </p>
           </div>
         ))}

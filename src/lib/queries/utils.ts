@@ -69,6 +69,24 @@ const fetchWithAdminKey = (queryString: string): Promise<Response> => {
   );
 };
 
+/** Server mode: the backend holds the admin key and keeps the permanent archive. */
+export const isServerMode = (): boolean => !getEnvVar("JELLYFIN_API_KEY");
+
+/** A request to the Wrapped backend, signed in as the current Jellyfin user. */
+export const serverFetch = async (
+  path: string,
+  init: RequestInit = {}
+): Promise<Response> => {
+  const api = await getAuthenticatedJellyfinApi();
+  return fetch(path, {
+    ...init,
+    headers: {
+      ...(init.headers ?? {}),
+      Authorization: `Bearer ${api.accessToken}`,
+    },
+  });
+};
+
 // Server mode: no admin key in the browser. The backend checks the user's own
 // Jellyfin token and only runs the query against that user's playback data.
 const fetchThroughServer = async (queryString: string): Promise<Response> => {

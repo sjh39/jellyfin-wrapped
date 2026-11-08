@@ -12,6 +12,10 @@ WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
+# The permanent archive (database + saved posters). Mount a volume here.
+RUN mkdir -p /data && chown node:node /data
+ENV ARCHIVE_DIR=/data
+VOLUME ["/data"]
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
