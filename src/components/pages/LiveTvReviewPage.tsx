@@ -1,41 +1,11 @@
 import EmptyState from "../EmptyState";
-import { Container, Grid, Card, Text, Flex } from "@radix-ui/themes";
-import { motion } from "framer-motion";
 import { useErrorBoundary } from "react-error-boundary";
 import { useLiveTvChannels } from "@/hooks/queries/useLiveTvChannels";
 import { LoadingSpinner } from "../LoadingSpinner";
 import { formatDuration } from "@/lib/utils";
-import { Title } from "../ui/styled";
 import PageContainer from "../PageContainer";
-
-const NEXT_PAGE = "/critically-acclaimed";
-
-function ChannelCard({
-  channelName,
-  duration,
-}: {
-  channelName: string;
-  duration: number;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-    >
-      <Card size="2">
-        <Flex direction="column" gap="2">
-          <Text size="5" weight="bold">
-            {channelName}
-          </Text>
-          <Text size="2" color="gray">
-            Watch time: {formatDuration(duration)}
-          </Text>
-        </Flex>
-      </Card>
-    </motion.div>
-  );
-}
+import { Slide } from "../wrapped/Slide";
+import { Row, Rows } from "../wrapped/Rows";
 
 export default function LiveTvReviewPage() {
   const { showBoundary } = useErrorBoundary();
@@ -55,52 +25,31 @@ export default function LiveTvReviewPage() {
   );
 
   if (!sortedChannels.length) {
-    return (
-      <EmptyState
-        title="No Live TV Activity"
-        backgroundColor="var(--blue-8)"
-        nextPage={NEXT_PAGE}
-        previousPage="/genres"
-      />
-    );
+    return <EmptyState title="No live TV activity" />;
   }
 
   return (
-    <PageContainer
-      backgroundColor="var(--blue-8)"
-      nextPage={NEXT_PAGE}
-      previousPage="/genres"
-    >
-      <Container size="4" p="4">
-        <Grid gap="6">
-          <div style={{ textAlign: "center" }}>
-            <Title as={motion.h1}>
-              You Watched {sortedChannels.length} Live TV Channels
-            </Title>
-            <p
-              style={{
-                fontSize: "1.125rem",
-                color: "var(--gray-11)",
-                marginTop: "0.5rem",
-              }}
-            >
-              Your live television viewing across different channels
-            </p>
-          </div>
-
-          <Grid columns={{ initial: "1", sm: "2", md: "3" }} gap="4">
-            {sortedChannels.map(
-              (channel: { channelName: string; duration: number }) => (
-                <ChannelCard
-                  key={channel.channelName}
-                  channelName={channel.channelName}
-                  duration={channel.duration}
-                />
-              )
-            )}
-          </Grid>
-        </Grid>
-      </Container>
+    <PageContainer>
+      <Slide
+        title={`You watched ${sortedChannels.length} live TV ${sortedChannels.length === 1 ? "channel" : "channels"}`}
+        sub="Your live television viewing across different channels"
+      >
+        <Rows>
+          {sortedChannels.map(
+            (
+              channel: { channelName: string; duration: number },
+              index: number
+            ) => (
+              <Row
+                key={channel.channelName}
+                n={index + 1}
+                title={channel.channelName}
+                meta={`Watch time ${formatDuration(channel.duration)}`}
+              />
+            )
+          )}
+        </Rows>
+      </Slide>
     </PageContainer>
   );
 }

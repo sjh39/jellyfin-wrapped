@@ -3,13 +3,13 @@ import { ErrorBoundary } from "react-error-boundary";
 import { Theme } from "@radix-ui/themes";
 import {
   createBrowserRouter,
+  Navigate,
   RouterProvider,
   Outlet,
   useLocation,
 } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import SplashPage from "./components/pages/SplashPage";
-import ServerConfigurationPage from "./components/pages/ServerConfigurationPage";
+import SignInPage from "./components/pages/SignInPage";
 import MoviesReviewPage from "./components/pages/MoviesReviewPage";
 import ShowReviewPage from "./components/pages/ShowReviewPage";
 import LiveTvReviewPage from "./components/pages/LiveTvReviewPage";
@@ -31,7 +31,7 @@ import NewThisYearPage from "./components/pages/NewThisYearPage";
 import CreditsPage from "./components/pages/CreditsPage";
 import { useEffect } from "react";
 import ActivityCalendarPage from "./components/pages/ActivityCalendarPage";
-import Navigation from "./components/Navigation";
+import { ErrorScreen } from "./components/ErrorScreen";
 import { LoadingPage } from "./components/pages/LoadingPage";
 
 const queryClient = new QueryClient({
@@ -54,7 +54,7 @@ function ScrollToTop() {
   useEffect(() => {
     window.scrollTo({
       top: 0,
-      behavior: "smooth",
+      behavior: "auto",
     });
   }, [pathname]);
 
@@ -63,11 +63,10 @@ function ScrollToTop() {
 
 function RootLayout() {
   return (
-    <ErrorBoundary fallback={<div>Something went wrong</div>}>
+    <ErrorBoundary FallbackComponent={ErrorScreen}>
       <ScrollToTop />
       <QueryClientProvider client={queryClient}>
-        <Theme>
-          <Navigation />
+        <Theme hasBackground={false}>
           <Outlet />
         </Theme>
       </QueryClientProvider>
@@ -82,11 +81,11 @@ const router = createBrowserRouter(
       children: [
         {
           path: "/",
-          element: <SplashPage />,
+          element: <SignInPage />,
         },
         {
           path: "/configure",
-          element: <ServerConfigurationPage />,
+          element: <Navigate to="/" replace />,
         },
         {
           path: "/loading",

@@ -1,49 +1,42 @@
-import { Container, Grid } from "@radix-ui/themes";
-import { motion } from "framer-motion";
-import { Title } from "./ui/styled";
+import { useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { neighbours, peekNavDirection, setNavDirection } from "@/lib/story";
 import PageContainer from "./PageContainer";
+import { Slide } from "./wrapped/Slide";
 
 interface EmptyStateProps {
   title: string;
   message?: string;
+  /** Old props, kept so existing callers compile. They are not used. */
   backgroundColor?: string;
   nextPage?: string;
   previousPage?: string;
 }
 
+// A slide with nothing to show. When the viewer is stepping through the story it is simply
+// passed over, in the direction they were going. Opened from the menu, it says what is missing.
 export default function EmptyState({
   title,
-  message = "No activity found for this category. Keep watching and check back later!",
-  backgroundColor = "var(--gray-8)",
-  nextPage,
-  previousPage,
+  message = "Nothing here yet. Watch a little more and check back.",
 }: EmptyStateProps) {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const { next, previous } = neighbours(pathname);
+  const direction = peekNavDirection();
+  const target =
+    direction === "next" ? next : direction === "previous" ? previous : null;
+
+  useEffect(() => {
+    if (!target) return;
+    // Keep the direction so a run of empty slides is passed over in one go.
+    setNavDirection(direction);
+    void navigate(target, { replace: true });
+  }, [target, direction, navigate]);
+
+  if (target) return null;
   return (
-    <PageContainer
-      backgroundColor={backgroundColor}
-      nextPage={nextPage}
-      previousPage={previousPage}
-    >
-      <Container size="4" p="4">
-        <Grid gap="4" style={{ textAlign: "center", paddingTop: "20vh" }}>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5 }}
-          >
-            <Title as={motion.h1}>{title}</Title>
-            <p
-              style={{
-                fontSize: "1.125rem",
-                color: "var(--gray-11)",
-                marginTop: "1rem",
-              }}
-            >
-              {message}
-            </p>
-          </motion.div>
-        </Grid>
-      </Container>
+    <PageContainer>
+      <Slide single title={title} sub={message} />
     </PageContainer>
   );
 }

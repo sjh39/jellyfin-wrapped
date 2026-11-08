@@ -1,30 +1,18 @@
 import EmptyState from "../EmptyState";
-import { useRef } from "react";
-import { Container, Grid } from "@radix-ui/themes";
-import { motion } from "framer-motion";
 import { useErrorBoundary } from "react-error-boundary";
-import { Title } from "../ui/styled";
-import { itemVariants } from "@/lib/styled-variants";
 import { useMinutesPlayedPerDay } from "@/hooks/queries/useMinutesPlayedPerDay";
 import { useViewingPatterns } from "@/hooks/queries/useViewingPatterns";
 import { LoadingSpinner } from "../LoadingSpinner";
 import { LineChart } from "../charts/LineChart";
 import { BarChart } from "../charts/BarChart";
 import PageContainer from "../PageContainer";
+import { Panel, Slide } from "../wrapped/Slide";
+import { Stat } from "../wrapped/Stat";
 
-const NEXT_PAGE = "/show-of-the-month";
 const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-const CHART_COLORS = {
-  timeOfDay: { line: "var(--blue-11)", area: "var(--blue-5)" },
-  dayOfWeek: { bar: "var(--purple-11)" },
-  activity: { line: "var(--orange-11)", area: "var(--orange-5)" },
-};
 
 export default function MinutesPlayedPerDayPage() {
   const { showBoundary } = useErrorBoundary();
-  const containerRef = useRef<HTMLDivElement>(null);
-
   const {
     data: playbackData,
     isLoading: l1,
@@ -46,19 +34,8 @@ export default function MinutesPlayedPerDayPage() {
   }
 
   if (!playbackData || !viewingPatterns) {
-    return (
-      <EmptyState
-        title="No Daily Viewing Data"
-        backgroundColor="var(--amber-8)"
-        nextPage={NEXT_PAGE}
-        previousPage="/holidays"
-      />
-    );
+    return <EmptyState title="No daily viewing data" />;
   }
-
-  const containerWidth = containerRef.current?.clientWidth || 600;
-  const chartWidth = Math.min(containerWidth - 40, 800);
-  const chartHeight = 300;
 
   const sortedData = [...playbackData].sort(
     (a: { date: string }, b: { date: string }) =>
@@ -71,15 +48,12 @@ export default function MinutesPlayedPerDayPage() {
   }));
 
   const timeOfDayData = viewingPatterns.timeOfDay.map(
-    (d: { hour: number; minutes: number }) => ({
-      x: d.hour,
-      y: d.minutes,
-    })
+    (d: { hour: number; minutes: number }) => ({ x: d.hour, y: d.minutes })
   );
 
   const dayOfWeekData = viewingPatterns.dayOfWeek.map(
     (d: { day: number; minutes: number }) => ({
-      label: dayNames[d.day],
+      label: dayNames[d.day] ?? String(d.day),
       value: d.minutes,
     })
   );
@@ -91,94 +65,36 @@ export default function MinutesPlayedPerDayPage() {
   const totalHours = Math.floor(totalMinutes / 60);
 
   return (
-    <PageContainer
-      backgroundColor="var(--amber-8)"
-      nextPage={NEXT_PAGE}
-      previousPage="/holidays"
-    >
-      <Container size="4" p="4" ref={containerRef}>
-        <Grid gap="6">
-          <div style={{ textAlign: "center" }}>
-            <Title as={motion.h1} variants={itemVariants}>
-              Your Viewing Activity
-            </Title>
-            <p
-              style={{
-                fontSize: "1.125rem",
-                color: "var(--gray-11)",
-                marginTop: "0.5rem",
-              }}
-            >
-              See when you watch the most throughout the day and week
-            </p>
-            <p style={{ fontSize: "1.5rem", marginTop: "1rem" }}>
-              Total: {totalHours} hours
-            </p>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-            }}
-          >
-            <h3 style={{ textAlign: "center", marginBottom: "1rem" }}>
-              Daily Activity
-            </h3>
-            <LineChart
-              data={activityData}
-              width={chartWidth}
-              height={chartHeight}
-              xLabel="Days"
-              yLabel="Minutes"
-              lineColor={CHART_COLORS.activity.line}
-              areaColor={CHART_COLORS.activity.area}
-            />
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-            }}
-          >
-            <h3 style={{ textAlign: "center", marginBottom: "1rem" }}>
-              Time of Day
-            </h3>
-            <LineChart
-              data={timeOfDayData}
-              width={chartWidth}
-              height={chartHeight}
-              xLabel="Hour"
-              yLabel="Minutes"
-              lineColor={CHART_COLORS.timeOfDay.line}
-              areaColor={CHART_COLORS.timeOfDay.area}
-            />
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-            }}
-          >
-            <h3 style={{ textAlign: "center", marginBottom: "1rem" }}>
-              Day of Week
-            </h3>
-            <BarChart
-              data={dayOfWeekData}
-              width={chartWidth}
-              height={chartHeight}
-              xLabel="Day"
-              yLabel="Minutes"
-              barColor={CHART_COLORS.dayOfWeek.bar}
-            />
-          </div>
-        </Grid>
-      </Container>
+    <PageContainer>
+      <Slide
+        title="Your viewing activity"
+        sub="See when you watch the most throughout the day and week"
+      >
+        <Stat value={totalHours.toLocaleString()} label="hours watched" />
+        <Panel title="Day of week">
+          <BarChart
+            data={dayOfWeekData}
+            yLabel="Minutes"
+            label="Minutes watched on each day of the week"
+          />
+        </Panel>
+        <Panel title="Time of day">
+          <LineChart
+            data={timeOfDayData}
+            xLabel="Hour of the day"
+            yLabel="Minutes"
+            label="Minutes watched at each hour of the day"
+          />
+        </Panel>
+        <Panel title="Day by day">
+          <LineChart
+            data={activityData}
+            xLabel="Days"
+            yLabel="Minutes"
+            label="Minutes watched on each day"
+          />
+        </Panel>
+      </Slide>
     </PageContainer>
   );
 }

@@ -1,96 +1,94 @@
-import { useEffect, useRef } from "react";
-import * as d3 from "d3";
+import { area, extent, line, max, scaleLinear } from "d3";
 
-type LineChartData = { x: number; y: number };
+type Point = { x: number; y: number };
 
+const W = 600;
+const H = 380;
+const M = { top: 44, right: 14, bottom: 62, left: 92 };
+
+// A thick line over a flat tint, on a thick baseline.
 export function LineChart({
   data,
-  width,
-  height,
   xLabel,
   yLabel,
-  lineColor,
-  areaColor,
+  label,
 }: {
-  data: LineChartData[];
-  width: number;
-  height: number;
+  data: Point[];
   xLabel: string;
   yLabel: string;
-  lineColor: string;
-  areaColor: string;
+  /** What the chart shows, for screen readers. */
+  label: string;
 }) {
-  const ref = useRef<SVGSVGElement>(null);
+  if (!data.length) return null;
+  const innerW = W - M.left - M.right;
+  const innerH = H - M.top - M.bottom;
+  const [x0, x1] = extent(data, (d) => d.x) as [number, number];
+  const x = scaleLinear()
+    .domain([x0, x1 === x0 ? x0 + 1 : x1])
+    .range([0, innerW]);
+  const y = scaleLinear()
+    .domain([0, max(data, (d) => d.y) || 1])
+    .nice()
+    .range([innerH, 0]);
 
-  useEffect(() => {
-    if (!ref.current || !data.length) return;
+  const path = line<Point>()
+    .x((d) => x(d.x))
+    .y((d) => y(d.y))(data);
+  const fill = area<Point>()
+    .x((d) => x(d.x))
+    .y0(innerH)
+    .y1((d) => y(d.y))(data);
 
-    const margin = { top: 20, right: 30, bottom: 40, left: 50 };
-    const innerWidth = width - margin.left - margin.right;
-    const innerHeight = height - margin.top - margin.bottom;
-
-    d3.select(ref.current).selectAll("*").remove();
-
-    const svg = d3
-      .select(ref.current)
-      .attr("width", width)
-      .attr("height", height)
-      .append("g")
-      .attr("transform", `translate(${margin.left},${margin.top})`);
-
-    const x = d3
-      .scaleLinear()
-      .domain([0, d3.max(data, (d: LineChartData) => d.x) ?? 0])
-      .range([0, innerWidth]);
-
-    const y = d3
-      .scaleLinear()
-      .domain([0, d3.max(data, (d: LineChartData) => d.y) ?? 0])
-      .range([innerHeight, 0]);
-
-    const line = d3
-      .line<LineChartData>()
-      .x((d: LineChartData) => x(d.x))
-      .y((d: LineChartData) => y(d.y));
-
-    const area = d3
-      .area<LineChartData>()
-      .x((d: LineChartData) => x(d.x))
-      .y0(innerHeight)
-      .y1((d: LineChartData) => y(d.y));
-
-    svg.append("path").datum(data).attr("fill", areaColor).attr("d", area);
-
-    svg
-      .append("path")
-      .datum(data)
-      .attr("fill", "none")
-      .attr("stroke", lineColor)
-      .attr("stroke-width", 2)
-      .attr("d", line);
-
-    svg
-      .append("g")
-      .attr("transform", `translate(0,${innerHeight})`)
-      .call(d3.axisBottom(x))
-      .append("text")
-      .attr("x", innerWidth / 2)
-      .attr("y", 35)
-      .attr("fill", "currentColor")
-      .style("text-anchor", "middle")
-      .text(xLabel);
-
-    svg
-      .append("g")
-      .call(d3.axisLeft(y))
-      .append("text")
-      .attr("transform", "rotate(-90)")
-      .attr("y", -40)
-      .attr("x", -innerHeight / 2)
-      .attr("fill", "currentColor")
-      .style("text-anchor", "middle")
-      .text(yLabel);
-  }, [data, width, height, xLabel, yLabel, lineColor, areaColor]);
-
-  return <svg ref={ref} />;
+  return (
+    <svg
+      className="wp-chart"
+      viewBox={`0 0 ${W} ${H}`}
+      role="img"
+      aria-label={label}
+    >
+      <text x={0} y={26}>
+        {yLabel}
+      </text>
+      <g transform={`translate(${M.left},${M.top})`}>
+        {y.ticks(3).map((tick) => (
+          <g key={tick}>
+            <line
+              className="grid"
+              x1={0}
+              x2={innerW}
+              y1={y(tick)}
+              y2={y(tick)}
+            />
+            <text
+              x={-14}
+              y={y(tick)}
+              textAnchor="end"
+              dominantBaseline="middle"
+            >
+              {tick.toLocaleString()}
+            </text>
+          </g>
+        ))}
+        {fill && <path d={fill} fill="var(--accent)" opacity={0.3} />}
+        {path && (
+          <path
+            d={path}
+            fill="none"
+            stroke="var(--accent)"
+            strokeWidth={data.length > 60 ? 4 : 9}
+            strokeLinejoin="round"
+          />
+        )}
+        <line className="axis" x1={0} x2={innerW} y1={innerH} y2={innerH} />
+        {x.ticks(5).map((tick) => (
+          <text key={tick} x={x(tick)} y={innerH + 36} textAnchor="middle">
+            {tick}
+          </text>
+        ))}
+        <text x={innerW / 2} y={innerH + 62} textAnchor="middle">
+          {xLabel}
+        </text>
+      </g>
+    </svg>
+  );
 }

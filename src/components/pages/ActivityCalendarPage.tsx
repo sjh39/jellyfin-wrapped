@@ -1,16 +1,19 @@
 import { ResponsiveCalendar } from "@nivo/calendar";
-import { Card } from "@/components/ui/card";
-import { Container } from "@radix-ui/themes";
 import { useErrorBoundary } from "react-error-boundary";
 import { subYears, format } from "date-fns";
-import { Title } from "../ui/styled";
-import { motion } from "framer-motion";
 import { useCalendar } from "@/hooks/queries/useCalendar";
 import { LoadingSpinner } from "../LoadingSpinner";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import PageContainer from "../PageContainer";
+import { Slide } from "../wrapped/Slide";
 
-const NEXT_PAGE = "/";
+// The calendar sits on the dark slide: a quiet empty day, then four brand colors for more.
+const EMPTY_DAY = "#2b2f45";
+const SCALE = ["#8fd9b6", "#f6b52b", "#f0522e", "#fcfbf7"];
+const THEME = {
+  text: { fill: "#fcfbf7", fontSize: 16, fontWeight: 700 },
+  tooltip: { container: { color: "#101322", fontWeight: 700 } },
+};
 
 export default function ActivityCalendarPage() {
   const { showBoundary } = useErrorBoundary();
@@ -22,52 +25,41 @@ export default function ActivityCalendarPage() {
   }
 
   if (isLoading) {
-    return <LoadingSpinner backgroundColor="var(--gray-8)" />;
+    return <LoadingSpinner />;
   }
 
   const fromDate = format(subYears(new Date(), 1), "yyyy-MM-dd");
   const toDate = format(new Date(), "yyyy-MM-dd");
 
   return (
-    <PageContainer
-      backgroundColor="var(--indigo-8)"
-      nextPage={NEXT_PAGE}
-      previousPage="/device-stats"
-    >
-      <Container size="4" p="4">
-        <Card className="p-6">
-          <Title as={motion.h2} className="text-2xl font-bold mb-4">
-            Your Viewing Activity
-          </Title>
-          <p
-            style={{
-              fontSize: "1.125rem",
-              color: "var(--gray-11)",
-              marginBottom: "1rem",
-            }}
-          >
-            A calendar view of your daily viewing patterns
-          </p>
-          <div style={{ height: isMobile ? "300px" : "500px" }}>
-            <ResponsiveCalendar
-              data={data ?? []}
-              from={fromDate}
-              to={toDate}
-              emptyColor="#eeeeee"
-              colors={["#61cdbb", "#97e3d5", "#e8c1a0", "#f47560"]}
-              margin={
-                isMobile
-                  ? { top: 20, right: 20, bottom: 20, left: 20 }
-                  : { top: 40, right: 40, bottom: 40, left: 40 }
-              }
-              yearSpacing={40}
-              monthBorderColor="#ffffff"
-              dayBorderWidth={2}
-              dayBorderColor="#ffffff"
-            />
-          </div>
-        </Card>
-      </Container>
+    <PageContainer>
+      <Slide
+        single
+        title="Your year on a calendar"
+        sub="Each square is a day. The brighter the color, the more you watched."
+      >
+        <div
+          role="img"
+          aria-label="A calendar of the last year, with each day colored by how much you watched"
+          style={{ height: isMobile ? "46rem" : "min(62vh, 36rem)" }}
+        >
+          <ResponsiveCalendar
+            data={data ?? []}
+            from={fromDate}
+            to={toDate}
+            direction={isMobile ? "vertical" : "horizontal"}
+            emptyColor={EMPTY_DAY}
+            colors={SCALE}
+            theme={THEME}
+            margin={{ top: 40, right: 10, bottom: 10, left: 10 }}
+            yearSpacing={40}
+            monthBorderColor="#fcfbf7"
+            monthBorderWidth={3}
+            dayBorderWidth={2}
+            dayBorderColor="#101322"
+          />
+        </div>
+      </Slide>
     </PageContainer>
   );
 }

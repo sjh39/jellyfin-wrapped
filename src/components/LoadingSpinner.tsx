@@ -1,21 +1,21 @@
-import { Spinner } from "@radix-ui/themes";
-
-export function LoadingSpinner({
-  backgroundColor = "var(--green-8)",
-}: {
+interface LoadingSpinnerProps {
+  /** Old prop, kept so existing callers compile. It is not used. */
   backgroundColor?: string;
-}) {
+}
+
+export function LoadingSpinner(props: LoadingSpinnerProps) {
+  void props;
   return (
     <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "100vh",
-        backgroundColor,
-      }}
+      className="wp-page wp-center tone-ink"
+      role="status"
+      aria-label="Loading"
     >
-      <Spinner size="3" />
+      <div className="wp-loading" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </div>
     </div>
   );
 }

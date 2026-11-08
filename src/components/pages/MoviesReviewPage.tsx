@@ -1,16 +1,13 @@
 import EmptyState from "../EmptyState";
 import { useState } from "react";
-import { Container, Grid } from "@radix-ui/themes";
-import { motion } from "framer-motion";
 import { useErrorBoundary } from "react-error-boundary";
 import { useMovies } from "@/hooks/queries/useMovies";
 import { MovieCard } from "./MoviesReviewPage/MovieCard";
-import { Title } from "../ui/styled";
-import { itemVariants } from "@/lib/styled-variants";
 import PageContainer from "../PageContainer";
 import { LoadingSpinner } from "../LoadingSpinner";
 import { getCachedHiddenIds, setCachedHiddenId } from "@/lib/cache";
-import { generateGuid } from "@/lib/utils";
+import { Slide } from "@/components/wrapped/Slide";
+import { PosterGrid } from "@/components/wrapped/Poster";
 
 const NEXT_PAGE = "/shows";
 
@@ -44,44 +41,26 @@ export default function MoviesReviewPage() {
   }
 
   return (
-    <PageContainer
-      backgroundColor="var(--purple-8)"
-      nextPage={NEXT_PAGE}
-      previousPage="/first-watched"
-    >
-      <Container size="4" p="4">
-        <Grid gap="6">
-          <div style={{ textAlign: "center" }}>
-            <Title as={motion.h1} variants={itemVariants}>
-              You Watched {visibleMovies.length} Movies
-            </Title>
-            <p
-              style={{
-                fontSize: "1.125rem",
-                color: "var(--gray-11)",
-                marginTop: "0.5rem",
-              }}
-            >
-              Your complete movie viewing history
-            </p>
-          </div>
-
-          <Grid columns={{ initial: "2", sm: "3", md: "4", lg: "5" }} gap="4">
-            {visibleMovies.map(
-              (movie: { id?: string; name?: string | null }) => (
-                <MovieCard
-                  key={generateGuid()}
-                  item={movie}
-                  onHide={() => {
-                    setCachedHiddenId(movie.id ?? "");
-                    setHiddenIds([...hiddenIds, movie.id ?? ""]);
-                  }}
-                />
-              )
-            )}
-          </Grid>
-        </Grid>
-      </Container>
+    <PageContainer>
+      <Slide
+        title={`You watched ${visibleMovies.length} ${visibleMovies.length === 1 ? "movie" : "movies"}`}
+        sub="Your complete movie viewing history"
+      >
+        <PosterGrid>
+          {visibleMovies.map(
+            (movie: { id?: string; name?: string | null }, index: number) => (
+              <MovieCard
+                key={movie.id ?? index}
+                item={movie}
+                onHide={() => {
+                  setCachedHiddenId(movie.id ?? "");
+                  setHiddenIds([...hiddenIds, movie.id ?? ""]);
+                }}
+              />
+            )
+          )}
+        </PosterGrid>
+      </Slide>
     </PageContainer>
   );
 }

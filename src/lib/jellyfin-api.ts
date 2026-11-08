@@ -1,8 +1,10 @@
 import { Api, Jellyfin } from "@jellyfin/sdk";
+import { getUserApi } from "@jellyfin/sdk/lib/utils/api";
 
 import {
   getCacheValue,
   JELLYFIN_AUTH_TOKEN_CACHE_KEY,
+  JELLYFIN_CURRENT_USER_CACHE_KEY,
   JELLYFIN_PASSWORD_CACHE_KEY,
   JELLYFIN_SERVER_URL_CACHE_KEY,
   JELLYFIN_USERNAME_CACHE_KEY,
@@ -120,7 +122,6 @@ export const authenticateByUserName = async (
       id: "Jellyfin-Wrapped",
     },
   });
-  console.log("Connecting to server...", { serverUrl, username });
   api = jellyfin.createApi(serverUrl);
 
   try {
@@ -133,10 +134,35 @@ export const authenticateByUserName = async (
     }
     removeCacheValue(JELLYFIN_PASSWORD_CACHE_KEY);
   } catch (error) {
-    console.error("Connection failed:", error);
-    alert(error);
+    // Forget the half-made client: the next attempt must start clean, not reuse it.
+    api = null;
     throw error;
   }
 
   return api;
+};
+
+// Used when the sign-in page opens: a returning viewer whose saved session still works goes
+// straight in, with nothing to type. A saved session that no longer works is forgotten.
+export const resumeSession = async (): Promise<boolean> => {
+  const token = getCacheValue(JELLYFIN_AUTH_TOKEN_CACHE_KEY);
+  if (!token) return false;
+  try {
+    const candidate = authenticateByAuthToken(getServerUrl(), token);
+    await getUserApi(candidate).getCurrentUser({ timeout: 6000 });
+    return true;
+  } catch {
+    api = null;
+    removeCacheValue(JELLYFIN_AUTH_TOKEN_CACHE_KEY);
+    removeCacheValue(JELLYFIN_CURRENT_USER_CACHE_KEY);
+    return false;
+  }
+};
+
+// Forget this viewer on this device, then reload so nothing of them stays in memory.
+export const signOut = (): void => {
+  api = null;
+  removeCacheValue(JELLYFIN_AUTH_TOKEN_CACHE_KEY);
+  removeCacheValue(JELLYFIN_CURRENT_USER_CACHE_KEY);
+  window.location.assign(import.meta.env.BASE_URL);
 };

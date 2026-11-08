@@ -1,18 +1,15 @@
 import EmptyState from "../EmptyState";
 import { useState, useMemo } from "react";
-import { Container, Grid } from "@radix-ui/themes";
-import { motion } from "framer-motion";
-import { Title } from "../ui/styled";
-import { itemVariants } from "@/lib/styled-variants";
 import { useErrorBoundary } from "react-error-boundary";
 import { useWatchedOnDate } from "@/hooks/queries/useWatchedOnDate";
 import { LoadingSpinner } from "../LoadingSpinner";
 import { MovieCard } from "./MoviesReviewPage/MovieCard";
-import { generateGuid } from "@/lib/utils";
 import { getCachedHiddenIds, setCachedHiddenId } from "@/lib/cache";
 import { getHolidayDates } from "@/lib/holiday-helpers";
 import { subDays } from "date-fns";
 import PageContainer from "../PageContainer";
+import { Slide, Panel } from "@/components/wrapped/Slide";
+import { PosterGrid } from "@/components/wrapped/Poster";
 
 const NEXT_PAGE = "/minutes-per-day";
 
@@ -88,121 +85,76 @@ export default function HolidayReviewPage() {
   }
 
   return (
-    <PageContainer
-      backgroundColor="var(--grass-8)"
-      nextPage={NEXT_PAGE}
-      previousPage="/new-this-year"
-    >
-      <Container size="4" p="4">
-        <Grid gap="6">
-          <div style={{ textAlign: "center" }}>
-            <Title as={motion.h1} variants={itemVariants}>
-              What You Watched on Holidays
-            </Title>
-            <p
-              style={{
-                fontSize: "1.125rem",
-                color: "var(--gray-11)",
-                marginTop: "0.5rem",
-              }}
-            >
-              Your viewing activity during special occasions
-            </p>
-          </div>
-
-          {christmasItems.length > 0 && (
-            <>
-              <Title as={motion.h2} variants={itemVariants}>
-                Christmas
-              </Title>
-              <Grid
-                columns={{ initial: "2", sm: "3", md: "4", lg: "5" }}
-                gap="4"
-              >
-                {christmasItems.map((item: { id?: string }) => (
-                  <MovieCard
-                    key={generateGuid()}
-                    item={item}
-                    onHide={() => {
-                      setCachedHiddenId(item.id ?? "");
-                      setHiddenIds([...hiddenIds, item.id ?? ""]);
-                    }}
-                  />
-                ))}
-              </Grid>
-            </>
-          )}
-
-          {christmasEveItems.length > 0 && (
-            <>
-              <Title as={motion.h2} variants={itemVariants}>
-                Christmas Eve
-              </Title>
-              <Grid
-                columns={{ initial: "2", sm: "3", md: "4", lg: "5" }}
-                gap="4"
-              >
-                {christmasEveItems.map((item: { id?: string }) => (
-                  <MovieCard
-                    key={generateGuid()}
-                    item={item}
-                    onHide={() => {
-                      setCachedHiddenId(item.id ?? "");
-                      setHiddenIds([...hiddenIds, item.id ?? ""]);
-                    }}
-                  />
-                ))}
-              </Grid>
-            </>
-          )}
-
-          {halloweenItems.length > 0 && (
-            <>
-              <Title as={motion.h2} variants={itemVariants}>
-                Halloween
-              </Title>
-              <Grid
-                columns={{ initial: "2", sm: "3", md: "4", lg: "5" }}
-                gap="4"
-              >
-                {halloweenItems.map((item: { id?: string }) => (
-                  <MovieCard
-                    key={generateGuid()}
-                    item={item}
-                    onHide={() => {
-                      setCachedHiddenId(item.id ?? "");
-                      setHiddenIds([...hiddenIds, item.id ?? ""]);
-                    }}
-                  />
-                ))}
-              </Grid>
-            </>
-          )}
-
-          {valentinesItems.length > 0 && (
-            <>
-              <Title as={motion.h2} variants={itemVariants}>
-                Valentine's Day
-              </Title>
-              <Grid
-                columns={{ initial: "2", sm: "3", md: "4", lg: "5" }}
-                gap="4"
-              >
-                {valentinesItems.map((item: { id?: string }) => (
-                  <MovieCard
-                    key={generateGuid()}
-                    item={item}
-                    onHide={() => {
-                      setCachedHiddenId(item.id ?? "");
-                      setHiddenIds([...hiddenIds, item.id ?? ""]);
-                    }}
-                  />
-                ))}
-              </Grid>
-            </>
-          )}
-        </Grid>
-      </Container>
+    <PageContainer>
+      <Slide
+        title="What you watched on holidays"
+        sub="Your viewing activity during special occasions"
+      >
+        {christmasItems.length > 0 && (
+          <Panel title="Christmas">
+            <PosterGrid>
+              {christmasItems.map((item: { id?: string }, index: number) => (
+                <MovieCard
+                  key={item.id ?? index}
+                  item={item}
+                  onHide={() => {
+                    setCachedHiddenId(item.id ?? "");
+                    setHiddenIds([...hiddenIds, item.id ?? ""]);
+                  }}
+                />
+              ))}
+            </PosterGrid>
+          </Panel>
+        )}
+        {christmasEveItems.length > 0 && (
+          <Panel title="Christmas Eve">
+            <PosterGrid>
+              {christmasEveItems.map((item: { id?: string }, index: number) => (
+                <MovieCard
+                  key={item.id ?? index}
+                  item={item}
+                  onHide={() => {
+                    setCachedHiddenId(item.id ?? "");
+                    setHiddenIds([...hiddenIds, item.id ?? ""]);
+                  }}
+                />
+              ))}
+            </PosterGrid>
+          </Panel>
+        )}
+        {halloweenItems.length > 0 && (
+          <Panel title="Halloween">
+            <PosterGrid>
+              {halloweenItems.map((item: { id?: string }, index: number) => (
+                <MovieCard
+                  key={item.id ?? index}
+                  item={item}
+                  onHide={() => {
+                    setCachedHiddenId(item.id ?? "");
+                    setHiddenIds([...hiddenIds, item.id ?? ""]);
+                  }}
+                />
+              ))}
+            </PosterGrid>
+          </Panel>
+        )}
+        {valentinesItems.length > 0 && (
+          <Panel title="Valentine's Day">
+            <PosterGrid>
+              {valentinesItems.map((item: { id?: string }, index: number) => (
+                <MovieCard
+                  key={item.id ?? index}
+                  item={item}
+                  onHide={() => {
+                    setCachedHiddenId(item.id ?? "");
+                    setHiddenIds([...hiddenIds, item.id ?? ""]);
+                  }}
+                />
+              ))}
+            </PosterGrid>
+          </Panel>
+        )}
+      </Slide>
     </PageContainer>
   );
 }

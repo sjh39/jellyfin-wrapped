@@ -1,13 +1,11 @@
 import EmptyState from "../EmptyState";
-import { Container, Grid } from "@radix-ui/themes";
-import { motion } from "framer-motion";
 import { useErrorBoundary } from "react-error-boundary";
 import { useMovies } from "@/hooks/queries/useMovies";
 import { LoadingSpinner } from "../LoadingSpinner";
 import { MovieCard } from "./MoviesReviewPage/MovieCard";
-import { Subtitle, Title } from "../ui/styled";
-import { itemVariants } from "@/lib/styled-variants";
 import PageContainer from "../PageContainer";
+import { Slide } from "@/components/wrapped/Slide";
+import { PosterGrid } from "@/components/wrapped/Poster";
 
 const NEXT_PAGE = "/oldest-show";
 
@@ -45,40 +43,16 @@ export default function OldestMoviePage() {
   }
 
   return (
-    <PageContainer
-      backgroundColor="var(--teal-8)"
-      nextPage={NEXT_PAGE}
-      previousPage="/critically-acclaimed"
-    >
-      <Container size="4" p="4">
-        <Grid gap="6">
-          <div style={{ textAlign: "center" }}>
-            <Title as={motion.h1} variants={itemVariants}>
-              Oldest Movie You Watched
-            </Title>
-            <p
-              style={{
-                fontSize: "1.125rem",
-                color: "var(--gray-11)",
-                marginTop: "0.5rem",
-              }}
-            >
-              The most vintage film in your viewing history
-            </p>
-            <Subtitle as={motion.p} variants={itemVariants}>
-              Released in {movie.productionYear}
-            </Subtitle>
-          </div>
-
-          <Grid
-            columns={{ initial: "1", sm: "1", md: "1", lg: "1" }}
-            gap="4"
-            style={{ justifyItems: "center" }}
-          >
-            <MovieCard item={movie} />
-          </Grid>
-        </Grid>
-      </Container>
+    <PageContainer>
+      <Slide
+        title="Oldest movie you watched"
+        sub="The most vintage film in your viewing history"
+        note={`Released in ${movie.productionYear}`}
+      >
+        <PosterGrid size="one">
+          <MovieCard item={movie} />
+        </PosterGrid>
+      </Slide>
     </PageContainer>
   );
 }

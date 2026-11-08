@@ -1,85 +1,88 @@
-import { useEffect, useRef } from "react";
-import * as d3 from "d3";
+import { max, scaleBand, scaleLinear } from "d3";
 
 type BarChartData = { label: string; value: number };
 
+const W = 600;
+const H = 380;
+const M = { top: 44, right: 8, bottom: 58, left: 92 };
+
+// Flat bars on a thick baseline. The tallest bar takes the second color.
 export function BarChart({
   data,
-  width,
-  height,
-  xLabel,
   yLabel,
-  barColor,
+  label,
 }: {
   data: BarChartData[];
-  width: number;
-  height: number;
-  xLabel: string;
   yLabel: string;
-  barColor: string;
+  /** What the chart shows, for screen readers. */
+  label: string;
 }) {
-  const ref = useRef<SVGSVGElement>(null);
+  if (!data.length) return null;
+  const innerW = W - M.left - M.right;
+  const innerH = H - M.top - M.bottom;
+  const x = scaleBand()
+    .domain(data.map((d) => d.label))
+    .range([0, innerW])
+    .padding(0.16);
+  const top = max(data, (d) => d.value) ?? 0;
+  const y = scaleLinear()
+    .domain([0, top || 1])
+    .nice()
+    .range([innerH, 0]);
+  const tallest = data.findIndex((d) => d.value === top);
 
-  useEffect(() => {
-    if (!ref.current || !data.length) return;
-
-    const margin = { top: 20, right: 30, bottom: 40, left: 50 };
-    const innerWidth = width - margin.left - margin.right;
-    const innerHeight = height - margin.top - margin.bottom;
-
-    d3.select(ref.current).selectAll("*").remove();
-
-    const svg = d3
-      .select(ref.current)
-      .attr("width", width)
-      .attr("height", height)
-      .append("g")
-      .attr("transform", `translate(${margin.left},${margin.top})`);
-
-    const x = d3
-      .scaleBand()
-      .domain(data.map((d: BarChartData) => d.label))
-      .range([0, innerWidth])
-      .padding(0.1);
-
-    const y = d3
-      .scaleLinear()
-      .domain([0, d3.max(data, (d: BarChartData) => d.value) ?? 0])
-      .range([innerHeight, 0]);
-
-    svg
-      .selectAll("rect")
-      .data(data)
-      .enter()
-      .append("rect")
-      .attr("x", (d: BarChartData) => x(d.label) ?? 0)
-      .attr("y", (d: BarChartData) => y(d.value))
-      .attr("width", x.bandwidth())
-      .attr("height", (d: BarChartData) => innerHeight - y(d.value))
-      .attr("fill", barColor);
-
-    svg
-      .append("g")
-      .attr("transform", `translate(0,${innerHeight})`)
-      .call(d3.axisBottom(x))
-      .append("text")
-      .attr("x", innerWidth / 2)
-      .attr("y", 35)
-      .attr("fill", "currentColor")
-      .style("text-anchor", "middle")
-      .text(xLabel);
-
-    svg
-      .append("g")
-      .call(d3.axisLeft(y))
-      .append("text")
-      .attr("transform", "rotate(-90)")
-      .attr("y", -40)
-      .attr("x", -innerHeight / 2)
-      .attr("fill", "currentColor")
-      .style("text-anchor", "middle")
-      .text(yLabel);
-  }, [data, width, height, xLabel, yLabel, barColor]);
-
-  return <svg ref={ref} />;
+  return (
+    <svg
+      className="wp-chart"
+      viewBox={`0 0 ${W} ${H}`}
+      role="img"
+      aria-label={label}
+    >
+      <text x={0} y={26}>
+        {yLabel}
+      </text>
+      <g transform={`translate(${M.left},${M.top})`}>
+        {y.ticks(3).map((tick) => (
+          <g key={tick}>
+            <line
+              className="grid"
+              x1={0}
+              x2={innerW}
+              y1={y(tick)}
+              y2={y(tick)}
+            />
+            <text
+              x={-14}
+              y={y(tick)}
+              textAnchor="end"
+              dominantBaseline="middle"
+            >
+              {tick.toLocaleString()}
+            </text>
+          </g>
+        ))}
+        {data.map((d, i) => (
+          <rect
+            key={d.label}
+            x={x(d.label)}
+            y={y(d.value)}
+            width={x.bandwidth()}
+            height={innerH - y(d.value)}
+            fill={i === tallest ? "var(--accent2)" : "var(--accent)"}
+          />
+        ))}
+        <line className="axis" x1={0} x2={innerW} y1={innerH} y2={innerH} />
+        {data.map((d) => (
+          <text
+            key={d.label}
+            x={(x(d.label) ?? 0) + x.bandwidth() / 2}
+            y={innerH + 38}
+            textAnchor="middle"
+          >
+            {d.label}
+          </text>
+        ))}
+      </g>
+    </svg>
+  );
 }

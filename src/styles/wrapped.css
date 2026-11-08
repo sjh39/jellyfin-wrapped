@@ -1,0 +1,886 @@
+/*
+  Jellyfin Wrapped, "poster wall" design.
+
+  One flat, saturated color per slide, very heavy condensed type, hard edges, thick rules,
+  no gradients or shadows. Built to read from across a room (a TV or projector) as well as
+  on a phone or in a browser:
+    - everything is sized in rem, and the root size grows with the screen
+    - text stays inside a 5% safe margin (TV overscan)
+    - strokes are thick (a hairline vanishes on a projector)
+    - secondary text keeps at least 7:1 contrast on every slide color
+    - every control has a visible focus ring and works from a keyboard or remote
+*/
+
+:root {
+  --cobalt: #2438d6;
+  --tomato: #f0522e;
+  --marigold: #f6b52b;
+  --mint: #8fd9b6;
+  --ink: #101322;
+  --chalk: #fcfbf7;
+  --font:
+    "Archivo Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* TV overscan: keep everything 5% in from the edges. */
+  --pad-x: max(5vw, env(safe-area-inset-left, 0px));
+  --pad-y: max(4vh, env(safe-area-inset-top, 0px));
+}
+
+/* 16px on a phone, about 26px on a 1080p screen, capped for 4K. */
+html {
+  font-size: clamp(16px, 2.4vmin, 34px);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--chalk);
+  font-family: var(--font);
+  font-stretch: 100%;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-x: hidden;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* ---- slide colors ------------------------------------------------------------------ */
+
+.wp-page,
+.wp-sheet {
+  --bg: var(--ink);
+  --fg: var(--chalk);
+  --accent: var(--marigold);
+  --accent2: var(--chalk);
+  --on-accent: var(--ink);
+}
+.tone-tomato {
+  --bg: var(--tomato);
+  --fg: var(--ink);
+  --accent: var(--ink);
+  --accent2: var(--chalk);
+  --on-accent: var(--chalk);
+}
+.tone-marigold {
+  --bg: var(--marigold);
+  --fg: var(--ink);
+  --accent: var(--cobalt);
+  --accent2: var(--tomato);
+  --on-accent: var(--chalk);
+}
+.tone-cobalt {
+  --bg: var(--cobalt);
+  --fg: var(--chalk);
+  --accent: var(--marigold);
+  --accent2: var(--tomato);
+  --on-accent: var(--ink);
+}
+.tone-mint {
+  --bg: var(--mint);
+  --fg: var(--ink);
+  --accent: var(--cobalt);
+  --accent2: var(--tomato);
+  --on-accent: var(--chalk);
+}
+.tone-ink {
+  --bg: var(--ink);
+  --fg: var(--chalk);
+  --accent: var(--marigold);
+  --accent2: var(--tomato);
+  --on-accent: var(--ink);
+}
+.tone-chalk {
+  --bg: var(--chalk);
+  --fg: var(--ink);
+  --accent: var(--cobalt);
+  --accent2: var(--tomato);
+  --on-accent: var(--chalk);
+}
+
+/* ---- page shell ---------------------------------------------------------------------- */
+
+.wp-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  position: relative;
+}
+
+.wp-page :focus-visible,
+.wp-sheet :focus-visible {
+  outline: 0.3rem solid var(--fg);
+  outline-offset: 0.2rem;
+}
+
+.wp-top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg);
+  padding: calc(var(--pad-y) * 0.7) var(--pad-x) 0.6rem;
+}
+
+.wp-segments {
+  display: flex;
+  gap: 0.28rem;
+}
+.wp-segments i {
+  flex: 1;
+  height: 0.42rem;
+  background: var(--fg);
+  opacity: 0.25;
+}
+.wp-segments i.on {
+  opacity: 1;
+}
+
+.wp-stage {
+  flex: 1;
+  padding: 1.2rem var(--pad-x) 7rem;
+  outline: none;
+}
+
+.wp-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem var(--pad-x) calc(var(--pad-y) * 0.6);
+  background: var(--bg);
+  border-top: 0.3rem solid var(--fg);
+}
+.wp-count {
+  font-weight: 800;
+  font-size: 1.15rem;
+  white-space: nowrap;
+}
+.wp-count span {
+  font-weight: 600;
+}
+.wp-controls {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.wp-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  min-width: 3.4rem;
+  min-height: 3.4rem;
+  padding: 0 1rem;
+  border: 0.22rem solid var(--fg);
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-stretch: 75%;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.wp-btn svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  fill: currentColor;
+  flex: none;
+}
+.wp-btn:hover,
+.wp-btn[aria-pressed="true"] {
+  background: var(--fg);
+  color: var(--bg);
+}
+.wp-btn:focus-visible {
+  background: var(--fg);
+  color: var(--bg);
+}
+.wp-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: transparent;
+  color: var(--fg);
+}
+/* Narrow screens: just the count, and tighter buttons, so the four controls always fit. */
+@media (max-width: 639px) {
+  .wp-count span {
+    display: none;
+  }
+  .wp-controls {
+    gap: 0.4rem;
+  }
+  .wp-btn {
+    min-width: 3rem;
+    padding: 0 0.7rem;
+  }
+}
+.wp-label {
+  display: none;
+}
+@media (min-width: 640px) {
+  .wp-label {
+    display: inline;
+  }
+}
+
+.wp-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+/* ---- slide layout -------------------------------------------------------------------- */
+
+.wp-slide {
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 120rem;
+  margin: 0 auto;
+}
+
+.wp-title {
+  margin: 0;
+  font-stretch: 62%;
+  font-weight: 900;
+  text-transform: uppercase;
+  line-height: 0.86;
+  letter-spacing: -0.005em;
+  font-size: clamp(3.4rem, min(14vw, 17vh), 11rem);
+  word-spacing: 0.14em;
+  text-wrap: balance;
+  overflow-wrap: break-word;
+}
+/* Where supported, size the headline so its longest word just fits its column. */
+.wp-head {
+  container-type: inline-size;
+}
+@supports (width: 1cqi) {
+  .wp-title {
+    font-size: clamp(
+      3rem,
+      min(17vh, calc(100cqi / (var(--longest, 8) * 0.55))),
+      11rem
+    );
+  }
+}
+.wp-sub {
+  margin: 1rem 0 0;
+  max-width: 30ch;
+  font-size: clamp(1.2rem, 2.3vmin, 2.2rem);
+  font-weight: 700;
+  line-height: 1.25;
+}
+.wp-sub + .wp-sub {
+  margin-top: 0.5rem;
+  font-weight: 600;
+}
+
+.wp-body {
+  display: grid;
+  gap: 2rem;
+  align-content: start;
+  min-width: 0;
+}
+
+/* Two ranked lists side by side on a wide screen (Top 10). */
+.wp-cols {
+  display: grid;
+  gap: 2.5rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 900px) and (min-aspect-ratio: 5/4) {
+  .wp-cols {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4vw;
+  }
+}
+
+/* The one moment of motion: the headline slides up as the slide opens. */
+@keyframes wp-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.8rem);
+  }
+}
+.wp-title {
+  animation: wp-in 0.35s ease-out both;
+}
+
+/* Wide screens (TV, projector, laptop, desktop): headline on the left, content on the right. */
+@media (min-width: 900px) and (min-aspect-ratio: 5/4) {
+  .wp-slide {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: 4vw;
+    align-items: start;
+  }
+  .wp-head {
+    position: sticky;
+    top: 5.5rem;
+  }
+  .wp-slide.wp-single {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---- posters ------------------------------------------------------------------------- */
+
+.wp-grid {
+  display: grid;
+  gap: 1.2rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wp-grid.wp-big {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+}
+.wp-grid.wp-one {
+  grid-template-columns: minmax(0, 16rem);
+}
+@media (min-width: 900px) and (min-aspect-ratio: 5/4) {
+  .wp-grid.wp-one {
+    grid-template-columns: minmax(0, 17rem);
+  }
+}
+
+.wp-poster {
+  margin: 0;
+  position: relative;
+  min-width: 0;
+}
+.wp-art {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: 0.22rem solid var(--fg);
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+.wp-art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.wp-art b {
+  position: relative;
+  padding: 0.4rem 0.7rem;
+  font-stretch: 62%;
+  font-weight: 900;
+  text-transform: uppercase;
+  line-height: 0.9;
+  font-size: 5.5rem;
+}
+.wp-poster figcaption {
+  padding-top: 0.6rem;
+  display: grid;
+  gap: 0.15rem;
+}
+.wp-poster-title {
+  font-stretch: 62%;
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: 1.5rem;
+  line-height: 0.95;
+  overflow-wrap: break-word;
+}
+.wp-poster-meta {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.wp-hide {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 2;
+  width: 2.4rem;
+  height: 2.4rem;
+  display: grid;
+  place-items: center;
+  border: 0.18rem solid var(--fg);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+.wp-hide:hover,
+.wp-hide:focus-visible {
+  background: var(--fg);
+  color: var(--bg);
+}
+
+.wp-thumb {
+  width: 4rem;
+  flex: none;
+}
+.wp-thumb .wp-art {
+  border-width: 0.16rem;
+}
+.wp-thumb .wp-art b {
+  font-size: 2.4rem;
+  padding: 0.2rem 0.3rem;
+}
+
+/* ---- ranked rows --------------------------------------------------------------------- */
+
+.wp-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wp-row {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  min-height: 5.4rem;
+  padding: 0.9rem 0;
+  border-top: 0.3rem solid var(--fg);
+}
+.wp-row:last-child {
+  border-bottom: 0.3rem solid var(--fg);
+}
+.wp-row-n {
+  flex: none;
+  min-width: 2.2ch;
+  font-stretch: 62%;
+  font-weight: 900;
+  font-size: 3.2rem;
+  line-height: 1;
+}
+.wp-row-t {
+  flex: 1;
+  min-width: 0;
+  font-stretch: 62%;
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: clamp(1.5rem, 3.4vmin, 2.8rem);
+  line-height: 0.95;
+  overflow-wrap: break-word;
+}
+.wp-row-m {
+  flex: none;
+  max-width: 11rem;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 1.1rem;
+  line-height: 1.2;
+  text-align: right;
+}
+
+/* ---- big numbers --------------------------------------------------------------------- */
+
+.wp-stat {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+}
+.wp-stat-n {
+  font-stretch: 62%;
+  font-weight: 900;
+  line-height: 0.82;
+  font-size: clamp(6rem, min(36vw, 40vh), 22rem);
+}
+.wp-stat-l {
+  font-stretch: 62%;
+  font-weight: 900;
+  text-transform: uppercase;
+  line-height: 1;
+  font-size: clamp(2.4rem, min(12vw, 13vh), 8rem);
+}
+
+.wp-panel {
+  border-top: 0.3rem solid var(--fg);
+  padding-top: 1rem;
+  min-width: 0;
+}
+.wp-panel h2,
+.wp-h2 {
+  margin: 0 0 1rem;
+  font-stretch: 62%;
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: clamp(2rem, 5.2vmin, 3.8rem);
+  line-height: 0.95;
+}
+.wp-note {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+/* ---- charts -------------------------------------------------------------------------- */
+
+.wp-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.wp-chart text {
+  fill: var(--fg);
+  font-family: var(--font);
+  font-weight: 700;
+  font-size: 26px;
+}
+.wp-chart .axis {
+  stroke: var(--fg);
+  stroke-width: 6;
+  fill: none;
+}
+.wp-chart .grid {
+  stroke: var(--fg);
+  stroke-width: 2;
+  opacity: 0.25;
+}
+.wp-pie {
+  width: min(100%, 19rem);
+}
+.wp-legend {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+.wp-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+.wp-legend i {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: none;
+  border: 0.15rem solid var(--fg);
+}
+.wp-legend em {
+  margin-left: auto;
+  font-style: normal;
+}
+
+/* ---- empty and loading --------------------------------------------------------------- */
+
+.wp-empty p {
+  max-width: 30ch;
+}
+
+.wp-loading {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-end;
+  height: 4rem;
+}
+.wp-loading i {
+  width: 1.2rem;
+  height: 100%;
+  background: var(--fg);
+  animation: wp-pulse 0.9s ease-in-out infinite alternate;
+}
+.wp-loading i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.wp-loading i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes wp-pulse {
+  from {
+    height: 25%;
+  }
+  to {
+    height: 100%;
+  }
+}
+.wp-center {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.wp-meter {
+  height: 1.6rem;
+  border: 0.3rem solid var(--fg);
+  max-width: 40rem;
+}
+.wp-meter > i {
+  display: block;
+  height: 100%;
+  background: var(--fg);
+  transition: width 0.4s ease-out;
+}
+
+/* ---- sign in ------------------------------------------------------------------------- */
+
+.wp-signin {
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: var(--pad-y) var(--pad-x);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 2rem;
+  background: var(--cobalt);
+  color: var(--chalk);
+  font-family: var(--font);
+}
+.wp-signin h1 {
+  margin: 0;
+  font-stretch: 62%;
+  font-weight: 900;
+  text-transform: uppercase;
+  line-height: 0.85;
+  font-size: min(22vw, 17vh);
+}
+.wp-form {
+  display: grid;
+  gap: 0.9rem;
+  width: min(100%, 38rem);
+}
+.wp-form input {
+  height: 3.7rem;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--chalk);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  font-size: 1.3rem;
+  padding: 0 1.1rem;
+}
+.wp-form input::placeholder {
+  color: #505469;
+  opacity: 1;
+}
+.wp-form input:focus-visible {
+  outline: 0.28rem solid var(--ink);
+  outline-offset: -0.28rem;
+}
+.wp-form button[type="submit"] {
+  height: 4.2rem;
+  margin-top: 0.4rem;
+  border: 0;
+  border-radius: 0;
+  background: var(--tomato);
+  color: var(--ink);
+  font: inherit;
+  font-stretch: 62%;
+  font-weight: 900;
+  font-size: 2.2rem;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.wp-form button[type="submit"]:hover {
+  background: var(--marigold);
+}
+.wp-form button[type="submit"]:focus-visible {
+  outline: 0.28rem solid var(--chalk);
+  outline-offset: 0.2rem;
+}
+.wp-form button[disabled] {
+  opacity: 0.7;
+  cursor: progress;
+}
+.wp-link {
+  justify-self: start;
+  background: none;
+  border: 0;
+  padding: 0.3rem 0;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 0.18rem;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+.wp-link:focus-visible {
+  outline: 0.28rem solid var(--chalk);
+  outline-offset: 0.2rem;
+}
+.wp-error {
+  margin: 0;
+  padding: 0.8rem 1rem;
+  background: var(--ink);
+  color: var(--chalk);
+  font-weight: 700;
+}
+@media (min-aspect-ratio: 5/4) {
+  .wp-signin h1 {
+    font-size: min(15.5vw, 26vh);
+  }
+  .wp-form {
+    margin-left: auto;
+    width: min(46%, 42rem);
+  }
+}
+
+/* ---- chapter menu -------------------------------------------------------------------- */
+
+.wp-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(16, 19, 34, 0.65);
+}
+.wp-sheet {
+  --bg: var(--chalk);
+  --fg: var(--ink);
+  --accent: var(--cobalt);
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  width: min(34rem, 100vw);
+  overflow-y: auto;
+  padding: var(--pad-y) 1.6rem 2rem;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  display: grid;
+  align-content: start;
+  gap: 1.6rem;
+  animation: wp-sheet-in 0.2s ease-out both;
+}
+@keyframes wp-sheet-in {
+  from {
+    transform: translateX(2rem);
+    opacity: 0;
+  }
+}
+.wp-sheet h2 {
+  margin: 0;
+  font-stretch: 62%;
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: 2.4rem;
+  line-height: 1;
+}
+.wp-sheet-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.wp-field {
+  display: grid;
+  gap: 0.5rem;
+}
+.wp-field > span {
+  font-weight: 800;
+}
+.wp-field small {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.wp-select {
+  width: 100%;
+  height: 3.4rem;
+  border: 0.22rem solid var(--ink);
+  border-radius: 0;
+  background: var(--chalk);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  padding: 0 0.8rem;
+}
+.wp-chapters {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wp-chap {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  min-height: 3.2rem;
+  padding: 0.5rem 0.4rem;
+  border: 0;
+  border-top: 0.2rem solid var(--ink);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.wp-chap b {
+  font-stretch: 62%;
+  font-weight: 900;
+  min-width: 2ch;
+}
+.wp-chap[aria-current="page"] {
+  background: var(--marigold);
+}
+.wp-chap:hover,
+.wp-chap:focus-visible {
+  background: var(--ink);
+  color: var(--chalk);
+}
+
+/* ---- about and credits --------------------------------------------------------------- */
+
+.wp-prose {
+  display: grid;
+  gap: 1.6rem;
+}
+.wp-prose p {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 1.2rem;
+  line-height: 1.5;
+  font-weight: 600;
+}
+.wp-prose a {
+  color: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-thickness: 0.18rem;
+  text-underline-offset: 0.2em;
+}
+.wp-prose img {
+  display: block;
+  height: 1.6rem;
+  width: auto;
+  margin-bottom: 0.8rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wp-title,
+  .wp-sheet,
+  .wp-loading i,
+  .wp-meter > i {
+    animation: none !important;
+    transition: none !important;
+  }
+}

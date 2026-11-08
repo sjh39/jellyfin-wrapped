@@ -1,99 +1,69 @@
-import { useEffect, useRef } from "react";
-import * as d3 from "d3";
+import { arc, pie } from "d3";
+import { formatWatchTime } from "@/lib/time-helpers";
 
-type PieChartData = { name: string; minutes: number };
+type Slice = { name: string; minutes: number };
 
-export function PieChart({
-  data,
-  colors,
-  title,
-  containerWidth,
-}: {
-  data: PieChartData[];
-  colors: readonly string[];
-  title: string;
-  containerWidth: number;
-}) {
-  const ref = useRef<SVGSVGElement>(null);
+// The brand colors, outlined so a slice never merges into the slide behind it.
+const COLORS = [
+  "var(--cobalt)",
+  "var(--tomato)",
+  "var(--marigold)",
+  "var(--mint)",
+  "var(--ink)",
+  "var(--chalk)",
+];
+const MAX_SLICES = 5;
+const SIZE = 400;
 
-  useEffect(() => {
-    if (!ref.current || !data.length) return;
+export function PieChart({ data, title }: { data: Slice[]; title: string }) {
+  const sorted = [...data]
+    .filter((d) => d.minutes > 0)
+    .sort((a, b) => b.minutes - a.minutes);
+  if (!sorted.length) return null;
+  const head = sorted.slice(0, MAX_SLICES);
+  const rest = sorted.slice(MAX_SLICES);
+  const slices: Slice[] = rest.length
+    ? [
+        ...head,
+        { name: "Other", minutes: rest.reduce((s, d) => s + d.minutes, 0) },
+      ]
+    : head;
 
-    const smallChart = containerWidth < 600;
-    const width = smallChart ? containerWidth - 40 : (containerWidth - 80) / 2;
-    const pieSize = Math.min(400, width);
-    const radius = pieSize / 2;
-    const height = pieSize + data.length * 20 + 16;
-
-    d3.select(ref.current).selectAll("*").remove();
-
-    const svg = d3
-      .select(ref.current)
-      .attr("width", width)
-      .attr("height", height)
-      .append("g")
-      .attr("transform", `translate(${width / 2},${pieSize / 2})`);
-
-    const pie = d3
-      .pie<PieChartData>()
-      .value((d: PieChartData) => d.minutes)
-      .sort(null);
-
-    const arc = d3
-      .arc<d3.PieArcDatum<PieChartData>>()
-      .innerRadius(0)
-      .outerRadius(radius * 0.8);
-
-    const color = d3.scaleOrdinal<string>().range(colors);
-
-    svg
-      .selectAll("path")
-      .data(pie(data))
-      .enter()
-      .append("path")
-      .attr("d", arc)
-      .attr("fill", (_d: d3.PieArcDatum<PieChartData>, i: number) =>
-        color(String(i))
-      )
-      .attr("stroke", "white")
-      .style("stroke-width", "2px");
-
-    const legend = svg
-      .selectAll(".legend")
-      .data(data)
-      .enter()
-      .append("g")
-      .attr("class", "legend")
-      .attr(
-        "transform",
-        (_d: PieChartData, i: number) =>
-          `translate(${-radius * 0.8},${radius + 16 + i * 20})`
-      );
-
-    legend
-      .append("rect")
-      .attr("x", 0)
-      .attr("width", 18)
-      .attr("height", 18)
-      .style("fill", (_d: PieChartData, i: number) => color(String(i)));
-
-    legend
-      .append("text")
-      .attr("x", 25)
-      .attr("y", 9)
-      .attr("dy", ".35em")
-      .style("text-anchor", "start")
-      .style("font-size", "12px")
-      .style("fill", "white")
-      .text((d: PieChartData) => `${d.name} (${Math.round(d.minutes / 60)}h)`);
-  }, [data, colors, containerWidth]);
+  const radius = SIZE / 2 - 8;
+  const arcs = pie<Slice>()
+    .value((d) => d.minutes)
+    .sort(null)(slices);
+  const draw = arc<(typeof arcs)[number]>().innerRadius(0).outerRadius(radius);
 
   return (
     <div>
-      <h3 style={{ textAlign: "center", marginBottom: "10px", color: "white" }}>
-        {title}
-      </h3>
-      <svg ref={ref} />
+      <svg
+        className="wp-chart wp-pie"
+        viewBox={`0 0 ${SIZE} ${SIZE}`}
+        role="img"
+        aria-label={`${title}: ${slices.map((s) => s.name).join(", ")}`}
+      >
+        <g transform={`translate(${SIZE / 2},${SIZE / 2})`}>
+          {arcs.map((a, i) => (
+            <path
+              key={a.data.name}
+              d={draw(a) ?? undefined}
+              fill={COLORS[i % COLORS.length]}
+              stroke="var(--fg)"
+              strokeWidth={6}
+            />
+          ))}
+        </g>
+      </svg>
+      <ul className="wp-legend">
+        {slices.map((s, i) => (
+          <li key={s.name}>
+            <i style={{ background: COLORS[i % COLORS.length] }} />
+            {s.name}
+            <em>{formatWatchTime(s.minutes)}</em>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

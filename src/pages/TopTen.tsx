@@ -1,109 +1,55 @@
 import { useTopTen } from "@/hooks/queries/useTopTen";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ContentImage } from "@/components/ContentImage";
-import { RankBadge } from "@/components/RankBadge";
 import { formatWatchTime } from "@/lib/time-helpers";
 import { SimpleItemDto } from "@/lib/queries";
 import PageContainer from "@/components/PageContainer";
-import { Container, Grid } from "@radix-ui/themes";
-import { motion } from "framer-motion";
-import { Title } from "@/components/ui/styled";
+import EmptyState from "@/components/EmptyState";
+import { Slide, Panel } from "@/components/wrapped/Slide";
+import { Rows, Row } from "@/components/wrapped/Rows";
 
 export const TopTen = () => {
   const year = new Date().getFullYear();
   const { data, isLoading, error } = useTopTen();
 
   if (isLoading) return <LoadingSpinner />;
-  if (error) return <div>Error loading top ten</div>;
+  if (error) throw error;
   if (!data) return null;
+  if (!data.movies.length && !data.shows.length) {
+    return (
+      <EmptyState
+        title="Nothing to rank yet"
+        message="Watch a few things and your top 10 will show up here."
+      />
+    );
+  }
 
   return (
-    <PageContainer
-      backgroundColor="var(--purple-8)"
-      nextPage="/first-watched"
-      previousPage="/loading"
-    >
-      <Container size="4" p="4">
-        <Grid gap="6">
-          <div style={{ textAlign: "center" }}>
-            <Title as={motion.h1}>Your Top 10 of {year}</Title>
-          </div>
-
-          <Grid columns={{ initial: "1", md: "2" }} gap="6">
-            <div>
-              <h2
-                style={{
-                  fontSize: "2rem",
-                  fontWeight: "bold",
-                  marginBottom: "1.5rem",
-                  color: "white",
-                }}
-              >
-                Top Movies
-              </h2>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "1rem",
-                }}
-              >
+    <PageContainer>
+      <Slide single title={`Your top 10 of ${year}`}>
+        <div className="wp-cols">
+          {data.movies.length > 0 && (
+            <Panel title="Top movies">
+              <Rows>
                 {data.movies.map((movie: SimpleItemDto, index: number) => (
-                  <div
+                  <Row
                     key={movie.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "1rem",
-                      backgroundColor: "rgba(255, 255, 255, 0.1)",
-                      borderRadius: "8px",
-                      padding: "1rem",
-                    }}
-                  >
-                    <RankBadge rank={index + 1} />
-                    <ContentImage item={movie} />
-                    <div style={{ flex: 1 }}>
-                      <h3
-                        style={{
-                          fontWeight: 600,
-                          fontSize: "1.125rem",
-                          color: "white",
-                        }}
-                      >
-                        {movie.name}
-                      </h3>
-                      <p
-                        style={{
-                          fontSize: "0.875rem",
-                          color: "rgba(255, 255, 255, 0.7)",
-                        }}
-                      >
-                        {formatWatchTime((movie.durationSeconds ?? 0) / 60)}
-                      </p>
-                    </div>
-                  </div>
+                    n={index + 1}
+                    art={<ContentImage item={movie} />}
+                    title={movie.name}
+                    meta={
+                      movie.durationSeconds
+                        ? formatWatchTime(movie.durationSeconds / 60)
+                        : undefined
+                    }
+                  />
                 ))}
-              </div>
-            </div>
-
-            <div>
-              <h2
-                style={{
-                  fontSize: "2rem",
-                  fontWeight: "bold",
-                  marginBottom: "1.5rem",
-                  color: "white",
-                }}
-              >
-                Top Shows
-              </h2>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "1rem",
-                }}
-              >
+              </Rows>
+            </Panel>
+          )}
+          {data.shows.length > 0 && (
+            <Panel title="Top shows">
+              <Rows>
                 {data.shows.map(
                   (
                     show: {
@@ -113,47 +59,20 @@ export const TopTen = () => {
                     },
                     index: number
                   ) => (
-                    <div
+                    <Row
                       key={show.item.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "1rem",
-                        backgroundColor: "rgba(255, 255, 255, 0.1)",
-                        borderRadius: "8px",
-                        padding: "1rem",
-                      }}
-                    >
-                      <RankBadge rank={index + 1} />
-                      <ContentImage item={show.item} />
-                      <div style={{ flex: 1 }}>
-                        <h3
-                          style={{
-                            fontWeight: 600,
-                            fontSize: "1.125rem",
-                            color: "white",
-                          }}
-                        >
-                          {show.item.name}
-                        </h3>
-                        <p
-                          style={{
-                            fontSize: "0.875rem",
-                            color: "rgba(255, 255, 255, 0.7)",
-                          }}
-                        >
-                          {show.episodeCount} episodes •{" "}
-                          {formatWatchTime(show.playbackTime / 60)}
-                        </p>
-                      </div>
-                    </div>
+                      n={index + 1}
+                      art={<ContentImage item={show.item} />}
+                      title={show.item.name}
+                      meta={`${show.episodeCount} episodes, ${formatWatchTime(show.playbackTime / 60)}`}
+                    />
                   )
                 )}
-              </div>
-            </div>
-          </Grid>
-        </Grid>
-      </Container>
+              </Rows>
+            </Panel>
+          )}
+        </div>
+      </Slide>
     </PageContainer>
   );
 };
