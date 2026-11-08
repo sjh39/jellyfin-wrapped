@@ -1,196 +1,248 @@
-# Jellyfin Wrapped
+# Jellyfin Wrapped (Ultra.cc edition)
 
-A web application that generates personalized year-in-review statistics for your Jellyfin media server, inspired by Spotify Wrapped.
+A Spotify Wrapped–style year in review for a Jellyfin server, set up to run on an
+[Ultra.cc](https://ultra.cc) seedbox and rebuilt with a new poster-wall interface.
 
-## ⚠️ Security Warning
+This is a fork of [johnpc/jellyfin-wrapped](https://github.com/johnpc/jellyfin-wrapped).
+The stats and queries come from upstream. This fork changes how it is hosted, what it
+remembers and how it looks.
 
-**DO NOT host this application publicly on the internet when using API keys as environment variables.** The API key is embedded in the frontend JavaScript bundle and will be visible to anyone who visits your site. This could expose your Jellyfin server to unauthorized access.
+> **Security:** run it in **server mode** (the default here). The admin API key stays on
+> the backend and each viewer only ever sees their own plays. Don't set
+> `VITE_JELLYFIN_API_KEY` / `JELLYFIN_API_KEY` on the frontend for a shared server: that
+> puts the admin key in the page, where anyone who opens the site can read it.
 
-**Recommended deployment options:**
+## What's different from upstream
 
-- Host locally on your home network only
-- Use behind a VPN or authentication proxy
-- Deploy on a private network/intranet
-- Consider implementing server-side API key handling for public deployments
+| Area               | Upstream                                                                | This fork                                                                                                                            |
+| ------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Hosting            | Docker, served from `/`                                                 | One Node process on one port, under a sub-path (`/wrapped/`) behind Ultra.cc's nginx. No Docker needed. Docker still works.          |
+| Shared-host limits | –                                                                       | `LOW_MEMORY` mode and bounded workers so Node runs under Ultra.cc's per-process virtual-memory cap (~9.5 GB).                        |
+| History            | Whatever the Playback Reporting plugin still has (≈3 months by default) | Permanent archive of plays, items and posters. Wrapped still counts things you deleted from Jellyfin or that aged out of the plugin. |
+| Deleted items      | Missing posters / dropped                                               | Posters recovered from Jellyfin, then TMDB, TVmaze (shows) and Cover Art Archive (music). "New this year" includes deleted items.    |
+| Interface          | Card pages with a nav bar                                               | Full redesign (see below).                                                                                                           |
+| Secrets            | Env vars                                                                | Keys can be read from files outside the repo (`*_FILE`); a pre-commit hook blocks anything that looks like a key.                    |
 
-## Features
+## The redesign
 
-- 📊 View your most watched movies and TV shows
-- 🎵 See your most played music
-- ⏱️ Track your total watching/listening time
-- 📈 Get insights into your viewing habits
-- 🔒 Secure connection to your Jellyfin server
-- 📱 Responsive design for mobile and desktop
+Every page was rebuilt as a poster-wall "story":
 
-## Getting Started
+- **One sign-in screen.** Username and password. The server address is built in, so viewers
+  are never asked for it. Returning viewers with a valid session go straight in.
+- **Story navigation.** Move between slides with the on-screen buttons, the **← / →** keys,
+  a TV remote's d-pad, or a swipe on phones. Empty slides are skipped automatically.
+- **Chapter menu** (press **M**): jump to any slide, change the time range, turn screening
+  mode on or off, sign out.
+- **Screening mode** (press **Space**): slides advance on their own every 12 seconds for a
+  TV or projector. Any key hands control back.
+- **Layouts for phone, desktop and TV/projector,** with reduced-motion support.
+- **About and credits** slide with the TMDB / TVmaze / Cover Art Archive attribution.
 
-### Prerequisites
+Slides: Top 10, First watched, Movies, TV shows, Music, Music videos, Favorite actors,
+Genres, Live TV, Critically acclaimed, Oldest movie, Oldest show, New this year, Holidays,
+Watch time, Show of the month, Unfinished shows, Devices, Activity calendar, About and
+credits.
 
-- A Jellyfin server (version 10.8.0 or higher) with Jellyfin's official [Playback Reporting plugin](https://github.com/jellyfin/jellyfin-plugin-playbackreporting) installed
-- Admin access to your Jellyfin server to generate an API key
-- Your Jellyfin server URL
-- A valid Jellyfin username and password for user authentication
+## Requirements
 
-### Environment Variables
+- Jellyfin 10.8+ with the official
+  [Playback Reporting plugin](https://github.com/jellyfin/jellyfin-plugin-playbackreporting).
+  Raise the plugin's retention if you want past years; the archive keeps everything from
+  the day you start it.
+- A Jellyfin admin API key (Dashboard → API Keys → +).
+- Node **22.13 or newer** (the archive uses the built-in `node:sqlite`).
+- Optional: a free [TMDB](https://www.themoviedb.org/settings/api) key (the "API Read
+  Access Token") to find posters for items deleted before they were archived.
 
-The application requires the following environment variables to be set:
+## Install on Ultra.cc
 
-**For Development (Vite):**
+All commands run over SSH on your seedbox. Replace `USER`, `HOST` and `PORT` with your own
+values. Your public address is `https://USER.HOST.usbx.me`.
 
-- `VITE_JELLYFIN_SERVER_URL`: The URL of your Jellyfin server (e.g., `http://192.168.1.100:8096`)
-- `VITE_JELLYFIN_API_KEY`: An admin API key for accessing playback reporting data
-
-**For Production (Docker/Runtime):**
-
-- `JELLYFIN_SERVER_URL`: The URL of your Jellyfin server (e.g., `http://192.168.1.100:8096`)
-- `JELLYFIN_API_KEY`: An admin API key for accessing playback reporting data
-
-You can set these in a `.env` file in the project root for development:
+### 1. Get the code and Node
 
 ```bash
-# Copy the example file
-cp .env.example .env
-
-# Edit the .env file with your values
-VITE_JELLYFIN_SERVER_URL=http://your-jellyfin-server:8096
-VITE_JELLYFIN_API_KEY=your-admin-api-key-here
+cd ~
+git clone https://github.com/sjh39/jellyfin-wrapped.git
+cd jellyfin-wrapped
+node -v        # needs v22.13+. If not, install it (e.g. with nvm) first.
 ```
 
-#### Getting an Admin API Key
-
-1. Log into your Jellyfin server as an administrator
-2. Go to Dashboard → API Keys
-3. Click "+" to create a new API key
-4. Give it a name (e.g., "Jellyfin Wrapped")
-5. Copy the generated API key and use it as `VITE_JELLYFIN_API_KEY` (development) or `JELLYFIN_API_KEY` (production)
-
-**Note**: The admin API key is required because recent Jellyfin versions restrict the `user_usage_stats/submit_custom_query` endpoint to admin users only.
-
-### Usage
-
-1. Set up the required environment variables (see Environment Variables section above)
-2. Run the application locally or deploy it to your preferred hosting platform
-3. If server URL is not configured via environment variables, enter your Jellyfin server URL
-4. Log in with your Jellyfin credentials
-5. View your personalized media statistics!
-
-## Development
-
-This project is built with:
-
-- React 18
-- TypeScript
-- Vite
-- Radix UI
-- TailwindCSS
-- React Router
-
-### Local Development
+### 2. Pick a port
 
 ```bash
-# Clone the repository
-git clone https://github.com/johnpc/jellyfin-wrapped.git
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
+app-ports free     # choose one from your assigned range
 ```
 
-## Building for Production
+Only use a port from your range.
 
-### Create production build
+### 3. Store the keys outside the repo
 
 ```bash
-npm run build
+mkdir -p ~/.secrets && chmod 700 ~/.secrets
+printf '%s' 'YOUR-JELLYFIN-ADMIN-KEY' > ~/.secrets/jellyfin-key
+printf '%s' 'YOUR-TMDB-READ-TOKEN'   > ~/.secrets/tmdb-key   # optional
+chmod 600 ~/.secrets/*
 ```
 
-### Preview production build
+### 4. Configure
 
 ```bash
-npm run preview
+cp .env.server.example .env.server    # git ignores this file
+nano .env.server
 ```
 
-## Building with Docker
-
-To build with docker, run the following commands
+Set at least:
 
 ```bash
-npm run build
-docker build -t jellyfin-wrapped .
-docker run -p 80:80 \
-  -e JELLYFIN_SERVER_URL=http://your-jellyfin-server:8096 \
-  -e JELLYFIN_API_KEY=your-admin-api-key \
-  jellyfin-wrapped
+JELLYFIN_SERVER_URL=https://USER.HOST.usbx.me/jellyfin
+JELLYFIN_API_KEY_FILE=/home/USER/.secrets/jellyfin-key
+TMDB_API_KEY_FILE=/home/USER/.secrets/tmdb-key
+PORT=PORT
+BASE_PATH=/wrapped/
+STATIC_DIR=/home/USER/jellyfin-wrapped/dist
+ARCHIVE_DIR=/home/USER/jellyfin-wrapped-data
+TRUST_PROXY_HOPS=1
+
+# Ultra.cc caps virtual memory per process. Without these Node runs out of address space.
+LOW_MEMORY=1
+MALLOC_ARENA_MAX=2
+NODE_OPTIONS=--disable-wasm-trap-handler
+MAX_CACHED_USERS=25
 ```
 
-Or, via docker compose:
+If the backend should reach Jellyfin at a different address than browsers do, set
+`JELLYFIN_SERVER_URL` to the internal one and `PUBLIC_JELLYFIN_URL` to the public one.
+
+### 5. Build
 
 ```bash
-# Edit docker-compose.yaml to set your environment variables
-# Start the service
-docker compose up -d
-
-# Stop the service
-docker compose down
-
-# Pull latest version
-docker compose pull
+npm ci
+MALLOC_ARENA_MAX=2 NODE_OPTIONS=--disable-wasm-trap-handler BASE_PATH=/wrapped/ npm run build
+npm run server:install
+npm --prefix server run build
 ```
 
-Now the Jellyfin Wrapped ui is available at `http://localhost` on port 80.
+`BASE_PATH` must match the value in `.env.server`.
 
-### Server mode (no admin key in the browser)
-
-By default the admin API key is injected into the page, so anyone who can open the
-site can read every user's playback data. Server mode keeps the key on a backend
-instead:
-
-- The browser signs in with the user's own Jellyfin account.
-- It sends that user's token to `/api/playback-report` on the backend.
-- The backend asks Jellyfin who the token belongs to, copies only that user's
-  rows into a throwaway in-memory database, and runs the page's SQL against it.
-  A query cannot read other users' rows, and anything other than a single
-  `SELECT`/`WITH` is rejected.
+### 6. Run it as a service
 
 ```bash
-cp .env.server.example .env.server   # set JELLYFIN_API_KEY here
+mkdir -p ~/.config/systemd/user
+which node    # use this path in ExecStart below
+nano ~/.config/systemd/user/jellyfin-wrapped.service
+```
+
+```ini
+[Unit]
+Description=Jellyfin Wrapped
+After=network-online.target
+
+[Service]
+Type=exec
+WorkingDirectory=%h/jellyfin-wrapped/server
+EnvironmentFile=%h/jellyfin-wrapped/.env.server
+ExecStart=/full/path/to/node dist/src/index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+```
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now jellyfin-wrapped.service
+systemctl --user status jellyfin-wrapped.service
+journalctl --user -u jellyfin-wrapped.service -f    # logs
+```
+
+### 7. Put it behind nginx
+
+```bash
+nano ~/.apps/nginx/proxy.d/jellyfin-wrapped.conf
+```
+
+```nginx
+location /wrapped/ {
+    proxy_pass http://127.0.0.1:PORT;
+    proxy_http_version 1.1;
+    proxy_set_header X-Forwarded-Host $http_host;
+}
+```
+
+No trailing slash after the port: the server expects the `/wrapped/` prefix.
+
+```bash
+app-nginx restart
+```
+
+Open `https://USER.HOST.usbx.me/wrapped/` and sign in with a Jellyfin account.
+
+### Updating
+
+```bash
+cd ~/jellyfin-wrapped && git pull
+npm ci && MALLOC_ARENA_MAX=2 NODE_OPTIONS=--disable-wasm-trap-handler BASE_PATH=/wrapped/ npm run build
+npm --prefix server ci && npm --prefix server run build
+systemctl --user restart jellyfin-wrapped.service
+```
+
+### Back up the archive
+
+`ARCHIVE_DIR` (`archive.sqlite` plus `images/`) is the only copy of plays and posters for
+anything since deleted. Back it up.
+
+## How the backend works
+
+1. The browser signs in to Jellyfin with the viewer's own account.
+2. It sends each slide's query to the backend with that viewer's token.
+3. The backend asks Jellyfin whose token it is, loads only that user's plays into a
+   throwaway in-memory database, and runs the query read-only. Cross-user queries return
+   nothing.
+4. A background sync copies new plays every 15 minutes and re-reads every library every
+   hour, which is how deleted items are noticed.
+
+The full security model, every setting and the archive endpoints are in
+[`server/README.md`](server/README.md).
+
+## Other ways to run it
+
+**Docker (any host that allows it):**
+
+```bash
+cp .env.server.example .env.server            # set the API key
 # set JELLYFIN_SERVER_URL in docker-compose.server.yaml
 docker compose -f docker-compose.server.yaml up -d --build
 ```
 
-Server mode is on whenever the frontend runs without `JELLYFIN_API_KEY`. Setting it
-brings back the original behavior. The backend's design, security model and every setting are documented in
-[`server/README.md`](server/README.md). Run its tests with `npm run server:test`.
+The compose file mounts a `wrapped-archive` volume for the archive. Keep it.
 
-The Playback Reporting plugin keeps about three months of history by default.
-Raise its retention if you want previous years.
-
-### Updating Published Docker Image
+**Local development:**
 
 ```bash
-docker build -t jellyfin-wrapped . --no-cache
-docker tag jellyfin-wrapped:latest mrorbitman/jellyfin-wrapped:latest
-docker push mrorbitman/jellyfin-wrapped:latest
+npm install
+npm run server:install
+JELLYFIN_SERVER_URL=http://localhost:8096 JELLYFIN_API_KEY=... npm run server:dev   # backend on :3000
+npm run dev                                                                          # frontend, proxies /api
 ```
 
-## Contributing
+Leave `VITE_JELLYFIN_API_KEY` unset so the frontend uses the backend.
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+## Keeping keys out of git
 
-## Privacy
+`.gitignore` excludes env files, `.secrets/`, key files and the archive.
+`scripts/check-secrets.sh` runs before every commit (husky) and blocks anything that looks
+like a key or token. Scan the whole repo with `npm run check-secrets`. Tests:
+`npm run server:test`.
 
-This application connects directly to your Jellyfin server and does not store any credentials or personal data on external servers. All data is processed locally in your browser.
+## Credits
 
-## Demo Screenshots
+- Original project: [johnpc/jellyfin-wrapped](https://github.com/johnpc/jellyfin-wrapped).
+- This product uses the TMDB API but is not endorsed or certified by TMDB. Show posters may
+  come from [TVmaze](https://www.tvmaze.com) (CC BY-SA 4.0) and music art from the
+  [Cover Art Archive](https://coverartarchive.org).
 
-![](https://files.jpc.io/d/rNQyo-Screenshot%202025-01-02%20at%2012.12.44%E2%80%AFAM.png)
+## License
 
-![](https://files.jpc.io/d/rNQyo-Screenshot%202025-01-02%20at%2012.13.40%E2%80%AFAM.png)
-
-![](https://files.jpc.io/d/rNQyo-Screenshot%202025-01-02%20at%2012.14.16%E2%80%AFAM.png)
-
-![](https://files.jpc.io/d/rNQyo-Screenshot%202025-01-02%20at%2012.15.57%E2%80%AFAM.png)
-
-![](https://files.jpc.io/d/rNQyo-Screenshot%202025-01-02%20at%2012.16.33%E2%80%AFAM.png)
+MIT. See [LICENSE](LICENSE).
