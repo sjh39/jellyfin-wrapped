@@ -46,6 +46,7 @@ describe("serving the app under a sub-path", () => {
       basePath: "/wrapped/",
       staticDir: dir,
       publicJellyfinUrl: "https://media.example.com/jellyfin",
+      lowMemory: process.env.LOW_MEMORY === "1",
     };
     const site = new StaticSite({
       dir,

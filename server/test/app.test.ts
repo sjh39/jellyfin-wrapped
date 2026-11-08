@@ -46,6 +46,7 @@ describe("playback report proxy", () => {
       basePath: "/",
       staticDir: undefined,
       publicJellyfinUrl: jellyfinUrl,
+      lowMemory: process.env.LOW_MEMORY === "1",
     };
     app = createApp({ config, jellyfin: new JellyfinClient(config) });
     await new Promise<void>((resolve) =>

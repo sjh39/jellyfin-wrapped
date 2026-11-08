@@ -156,6 +156,19 @@ location /wrapped/ {
 }
 ```
 
+If the host caps each process's virtual memory (check `ulimit -v`; Ultra.cc allows
+about 9.5 GB), also set:
+
+| Setting | Why |
+| --- | --- |
+| `LOW_MEMORY=1` | Per-user query databases use SQLite compiled to plain JavaScript. The WebAssembly build reserves ~2 GB of address space per user; this one ~50 MB. Queries are slower (still well under a second for personal stats). |
+| `MALLOC_ARENA_MAX=2` | Stops each thread reserving its own 64 MB memory pool. |
+| `NODE_OPTIONS=--disable-wasm-trap-handler` | Stops Node's built-in `fetch` reserving ~10 GB for WebAssembly. |
+| `MAX_CACHED_USERS=25` | Keeps the number of open per-user databases bounded. |
+
+Build the frontend there with the same two variables:
+`MALLOC_ARENA_MAX=2 NODE_OPTIONS=--disable-wasm-trap-handler BASE_PATH=/wrapped/ npm run build`
+
 `env.js` only ever contains the Jellyfin address. The admin key and TMDB key stay
 on the server.
 

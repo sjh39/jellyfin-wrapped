@@ -171,6 +171,7 @@ describe("deleted items end to end", () => {
       basePath: "/",
       staticDir: undefined,
       publicJellyfinUrl: jellyfinUrl,
+      lowMemory: process.env.LOW_MEMORY === "1",
     };
     const client = new JellyfinClient(config);
     archive = new Archive(join(dir, "archive.sqlite"));

@@ -150,6 +150,7 @@ export function createApp({
           maxRows: config.maxResultRows,
           maxBytes: config.maxResultBytes,
           memoryLimitMb: config.queryMemoryLimitMb,
+          lowMemory: config.lowMemory,
         })
       ),
     config.cacheTtlMs,

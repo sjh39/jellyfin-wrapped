@@ -78,7 +78,12 @@ export class UserDb {
 
   static async create(
     data: ActivityData,
-    limits: { maxRows: number; maxBytes: number; memoryLimitMb: number }
+    limits: {
+      maxRows: number;
+      maxBytes: number;
+      memoryLimitMb: number;
+      lowMemory?: boolean;
+    }
   ): Promise<UserDb> {
     const init: InitData = {
       columns: data.columns,
@@ -86,7 +91,18 @@ export class UserDb {
       ...limits,
     };
     const db = new UserDb(
-      new Worker(new URL("./worker.js", import.meta.url), { workerData: init })
+      new Worker(new URL("./worker.js", import.meta.url), {
+        workerData: init,
+        // Explicit, modest limits. Without them each worker reserves address space
+        // sized from the machine's RAM, and hosts that cap a process's virtual memory
+        // (Ultra.cc allows ~9.5 GB) run out after a few users.
+        resourceLimits: {
+          maxOldGenerationSizeMb: limits.memoryLimitMb + 128,
+          maxYoungGenerationSizeMb: 32,
+          codeRangeSizeMb: 32,
+          stackSizeMb: 4,
+        },
+      })
     );
     await db.ready;
     return db;

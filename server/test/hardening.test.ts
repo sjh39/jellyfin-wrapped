@@ -120,6 +120,7 @@ describe("limits on the running server", () => {
       basePath: "/",
       staticDir: undefined,
       publicJellyfinUrl: jellyfinUrl,
+      lowMemory: process.env.LOW_MEMORY === "1",
       ...overrides,
     };
     const app: App = createApp({

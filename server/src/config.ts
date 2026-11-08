@@ -44,6 +44,11 @@ export interface Config {
   staticDir: string | undefined;
   /** Jellyfin address as browsers reach it (defaults to JELLYFIN_SERVER_URL). */
   publicJellyfinUrl: string;
+  /**
+   * LOW_MEMORY=1: for hosts that cap a process's virtual memory (Ultra.cc: ~9.5 GB).
+   * Per-user query databases use plain-JavaScript SQLite (slower, far smaller).
+   */
+  lowMemory: boolean;
 }
 
 /** "wrapped", "/wrapped", "/wrapped/" -> "/wrapped/"; "" -> "/" */
@@ -51,7 +56,9 @@ export function normalizeBasePath(raw: string | undefined): string {
   const trimmed = (raw ?? "").trim().replace(/^\/+|\/+$/g, "");
   if (trimmed === "") return "/";
   if (!/^[A-Za-z0-9._~-]+(\/[A-Za-z0-9._~-]+)*$/.test(trimmed)) {
-    throw new Error("BASE_PATH may only contain letters, digits, . _ ~ - and /");
+    throw new Error(
+      "BASE_PATH may only contain letters, digits, . _ ~ - and /"
+    );
   }
   return `/${trimmed}/`;
 }
@@ -158,6 +165,10 @@ export function loadConfig(
     tmdbApiKey: readOptionalSecret(env, "TMDB_API_KEY", readFile),
     basePath: normalizeBasePath(env.BASE_PATH),
     staticDir: env.STATIC_DIR || undefined,
-    publicJellyfinUrl: (env.PUBLIC_JELLYFIN_URL || jellyfinUrl).replace(/\/+$/, ""),
+    publicJellyfinUrl: (env.PUBLIC_JELLYFIN_URL || jellyfinUrl).replace(
+      /\/+$/,
+      ""
+    ),
+    lowMemory: env.LOW_MEMORY === "1" || env.LOW_MEMORY === "true",
   };
 }

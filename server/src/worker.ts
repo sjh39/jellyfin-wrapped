@@ -1,7 +1,8 @@
 // Runs inside a worker thread. Owns one in-memory SQLite database that holds a single
 // user's PlaybackActivity rows, so nothing a query does can reach another user's data.
 import { parentPort, workerData } from "node:worker_threads";
-import initSqlJs from "sql.js";
+import { createRequire } from "node:module";
+import initSqlJs, { type SqlJsStatic } from "sql.js";
 import type { ColumnDef } from "./jellyfin.js";
 
 export interface InitData {
@@ -10,6 +11,12 @@ export interface InitData {
   maxRows: number;
   maxBytes: number;
   memoryLimitMb: number;
+  /**
+   * Use SQLite compiled to plain JavaScript instead of WebAssembly. About 20x slower,
+   * but it only reserves the memory it uses (the WebAssembly build reserves ~2 GB of
+   * address space per user), which matters on hosts that cap virtual memory.
+   */
+  lowMemory?: boolean;
 }
 
 export type WorkerRequest = { id: number; sql: string };
@@ -41,7 +48,13 @@ function post(message: WorkerResponse): void {
 }
 
 const init = workerData as InitData;
-const SQL = await initSqlJs();
+const loadPlainJs = (): Promise<SqlJsStatic> =>
+  (
+    createRequire(import.meta.url)(
+      "sql.js/dist/sql-asm-memory-growth.js"
+    ) as typeof initSqlJs
+  )();
+const SQL = init.lowMemory ? await loadPlainJs() : await initSqlJs();
 const db = new SQL.Database();
 
 const columnList = init.columns.map((c) => quoteIdentifier(c.name)).join(", ");
