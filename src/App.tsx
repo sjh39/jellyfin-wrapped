@@ -28,6 +28,7 @@ import CriticallyAcclaimedPage from "./components/pages/CriticallyAcclaimedPage"
 import TopTenPage from "./components/pages/TopTenPage";
 import FirstWatchedPage from "./components/pages/FirstWatchedPage";
 import NewThisYearPage from "./components/pages/NewThisYearPage";
+import CreditsPage from "./components/pages/CreditsPage";
 import { useEffect } from "react";
 import ActivityCalendarPage from "./components/pages/ActivityCalendarPage";
 import Navigation from "./components/Navigation";
@@ -74,101 +75,111 @@ function RootLayout() {
   );
 }
 
-const router = createBrowserRouter([
+const router = createBrowserRouter(
+  [
+    {
+      element: <RootLayout />,
+      children: [
+        {
+          path: "/",
+          element: <SplashPage />,
+        },
+        {
+          path: "/configure",
+          element: <ServerConfigurationPage />,
+        },
+        {
+          path: "/loading",
+          element: <LoadingPage />,
+        },
+        {
+          path: "/first-watched",
+          element: <FirstWatchedPage />,
+        },
+        {
+          path: "/movies",
+          element: <MoviesReviewPage />,
+        },
+        {
+          path: "/oldest-show",
+          element: <OldestShowPage />,
+        },
+        {
+          path: "/oldest-movie",
+          element: <OldestMoviePage />,
+        },
+        {
+          path: "/shows",
+          element: <ShowReviewPage />,
+        },
+        {
+          path: "/tv",
+          element: <LiveTvReviewPage />,
+        },
+        {
+          path: "/audio",
+          element: <AudioReviewPage />,
+        },
+        {
+          path: "/critically-acclaimed",
+          element: <CriticallyAcclaimedPage />,
+        },
+        {
+          path: "/credits",
+          element: <CreditsPage />,
+        },
+        {
+          path: "/new-this-year",
+          element: <NewThisYearPage />,
+        },
+        {
+          path: "/actors",
+          element: <FavoriteActorsPage />,
+        },
+        {
+          path: "/music-videos",
+          element: <MusicVideoPage />,
+        },
+        {
+          path: "/genres",
+          element: <GenreReviewPage />,
+        },
+        {
+          path: "/holidays",
+          element: <HolidayReviewPage />,
+        },
+        {
+          path: "/minutes-per-day",
+          element: <MinutesPlayedPerDayPage />,
+        },
+        {
+          path: "/show-of-the-month",
+          element: <ShowOfTheMonthPage />,
+        },
+        {
+          path: "/unfinished-shows",
+          element: <UnfinishedShowsPage />,
+        },
+        {
+          path: "/device-stats",
+          element: <DeviceStatsPage />,
+        },
+        {
+          path: "/punch-card",
+          element: <ActivityCalendarPage />,
+        },
+        {
+          path: "/TopTen",
+          element: <TopTenPage />,
+        },
+      ],
+    },
+  ],
   {
-    element: <RootLayout />,
-    children: [
-      {
-        path: "/",
-        element: <SplashPage />,
-      },
-      {
-        path: "/configure",
-        element: <ServerConfigurationPage />,
-      },
-      {
-        path: "/loading",
-        element: <LoadingPage />,
-      },
-      {
-        path: "/first-watched",
-        element: <FirstWatchedPage />,
-      },
-      {
-        path: "/movies",
-        element: <MoviesReviewPage />,
-      },
-      {
-        path: "/oldest-show",
-        element: <OldestShowPage />,
-      },
-      {
-        path: "/oldest-movie",
-        element: <OldestMoviePage />,
-      },
-      {
-        path: "/shows",
-        element: <ShowReviewPage />,
-      },
-      {
-        path: "/tv",
-        element: <LiveTvReviewPage />,
-      },
-      {
-        path: "/audio",
-        element: <AudioReviewPage />,
-      },
-      {
-        path: "/critically-acclaimed",
-        element: <CriticallyAcclaimedPage />,
-      },
-      {
-        path: "/new-this-year",
-        element: <NewThisYearPage />,
-      },
-      {
-        path: "/actors",
-        element: <FavoriteActorsPage />,
-      },
-      {
-        path: "/music-videos",
-        element: <MusicVideoPage />,
-      },
-      {
-        path: "/genres",
-        element: <GenreReviewPage />,
-      },
-      {
-        path: "/holidays",
-        element: <HolidayReviewPage />,
-      },
-      {
-        path: "/minutes-per-day",
-        element: <MinutesPlayedPerDayPage />,
-      },
-      {
-        path: "/show-of-the-month",
-        element: <ShowOfTheMonthPage />,
-      },
-      {
-        path: "/unfinished-shows",
-        element: <UnfinishedShowsPage />,
-      },
-      {
-        path: "/device-stats",
-        element: <DeviceStatsPage />,
-      },
-      {
-        path: "/punch-card",
-        element: <ActivityCalendarPage />,
-      },
-      {
-        path: "/TopTen",
-        element: <TopTenPage />,
-      },
-    ],
-  },
-]);
+    // Matches the build's BASE_PATH ("/" unless served under a sub-path).
+    basename: import.meta.env.BASE_URL.replace(/\/$/, "") || "/",
+  }
+);
 
 function App() {
   return <RouterProvider router={router} />;

@@ -17,7 +17,7 @@ const U2 = "22222222222222222222222222222222";
 const LIB_MOVIES = "a0000000000000000000000000000001";
 const LIB_PRIVATE = "a0000000000000000000000000000002";
 const MOVIE = "b0000000000000000000000000000001";
-const SECRET = "b0000000000000000000000000000002";
+const PRIVATE_MOVIE = "b0000000000000000000000000000002";
 const SERIES = "c0000000000000000000000000000001";
 const SEASON = "c0000000000000000000000000000002";
 const EP_GONE = "c0000000000000000000000000000003";
@@ -89,11 +89,11 @@ describe("archive", () => {
   it("only shows items from libraries the user can open", () => {
     const a = new Archive(":memory:");
     a.upsertItems([{ Id: MOVIE, Name: "Public", Type: "Movie" }], LIB_MOVIES, "2025-01-01");
-    a.upsertItems([{ Id: SECRET, Name: "Private", Type: "Movie" }], LIB_PRIVATE, "2025-01-01");
+    a.upsertItems([{ Id: PRIVATE_MOVIE, Name: "Private", Type: "Movie" }], LIB_PRIVATE, "2025-01-01");
     a.setUserLibraries(new Map([[U1, ["*"]], [U2, [LIB_MOVIES]]]));
-    assert.equal(a.itemsForUser(U1, [MOVIE, SECRET]).length, 2);
-    assert.deepEqual(a.itemsForUser(U2, [MOVIE, SECRET]).map((i) => i.Id), [MOVIE]);
-    assert.equal(a.canUserSee(U2, SECRET), false);
+    assert.equal(a.itemsForUser(U1, [MOVIE, PRIVATE_MOVIE]).length, 2);
+    assert.deepEqual(a.itemsForUser(U2, [MOVIE, PRIVATE_MOVIE]).map((i) => i.Id), [MOVIE]);
+    assert.equal(a.canUserSee(U2, PRIVATE_MOVIE), false);
     a.close();
   });
 });
@@ -168,6 +168,9 @@ describe("deleted items end to end", () => {
       playSyncMs: 60000,
       librarySyncMs: 600000,
       tmdbApiKey: undefined,
+      basePath: "/",
+      staticDir: undefined,
+      publicJellyfinUrl: jellyfinUrl,
     };
     const client = new JellyfinClient(config);
     archive = new Archive(join(dir, "archive.sqlite"));

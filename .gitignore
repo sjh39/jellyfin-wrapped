@@ -24,3 +24,17 @@ dist-ssr
 *.sw?
 .eslintcache
 .env.server
+
+# Secrets and local data: never commit these (API keys are protected secrets)
+.env
+.env.*
+!.env.server.example
+!.env.example
+.secrets/
+*.key
+data/
+server/data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+wrapped-archive/

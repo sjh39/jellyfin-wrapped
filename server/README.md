@@ -126,3 +126,44 @@ can see: items in libraries they can open, or items they played):
 
 Back up `ARCHIVE_DIR`. It is the only copy of anything that has since been deleted.
 Requires Node 22.13 or newer (uses the built-in `node:sqlite`).
+
+## Hosting without Docker (Ultra.cc and similar)
+
+The server can serve the web pages itself, under a sub-path, so one Node process and
+one port is all a shared host needs:
+
+```
+BASE_PATH=/wrapped/ npm run build                 # frontend, in the repo root
+cd server && npm ci && npm run build
+```
+
+Settings (in `.env.server`, which git ignores):
+
+| Setting | Example | Purpose |
+| --- | --- | --- |
+| `BASE_PATH` | `/wrapped/` | Prefix for the pages and the API. Same value as the build. |
+| `STATIC_DIR` | `/home/you/jellyfin-wrapped/dist` | Serve the built pages from this server. |
+| `PUBLIC_JELLYFIN_URL` | `https://you.host.usbx.me/jellyfin` | Jellyfin as browsers reach it, if different. |
+| `TRUST_PROXY_HOPS` | `1` | One reverse proxy (the host's nginx) in front. |
+
+Nginx forwards the whole path, prefix included:
+
+```
+location /wrapped/ {
+    proxy_pass http://127.0.0.1:PORT;
+    proxy_http_version 1.1;
+    proxy_set_header X-Forwarded-Host $http_host;
+}
+```
+
+`env.js` only ever contains the Jellyfin address. The admin key and TMDB key stay
+on the server.
+
+## Keeping keys out of git
+
+API keys are protected secrets. Keep them in files outside the repo (for example
+`~/.secrets/`, mode 600) and point `JELLYFIN_API_KEY_FILE` / `TMDB_API_KEY_FILE`
+at them. `.gitignore` excludes env files, `.secrets/`, key files and the archive,
+and `scripts/check-secrets.sh` runs before every commit (via husky) and blocks
+anything that looks like a key or token. Run `npm run check-secrets` to scan the
+whole repo.

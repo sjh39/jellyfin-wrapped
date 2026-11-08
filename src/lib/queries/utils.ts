@@ -69,6 +69,10 @@ const fetchWithAdminKey = (queryString: string): Promise<Response> => {
   );
 };
 
+/** A backend URL under the app's base path ("/api/x" or "/wrapped/api/x"). */
+export const apiPath = (path: string): string =>
+  `${import.meta.env.BASE_URL}${path.replace(/^\/+/, "")}`;
+
 /** Server mode: the backend holds the admin key and keeps the permanent archive. */
 export const isServerMode = (): boolean => !getEnvVar("JELLYFIN_API_KEY");
 
@@ -78,7 +82,7 @@ export const serverFetch = async (
   init: RequestInit = {}
 ): Promise<Response> => {
   const api = await getAuthenticatedJellyfinApi();
-  return fetch(path, {
+  return fetch(apiPath(path), {
     ...init,
     headers: {
       ...(init.headers ?? {}),
@@ -91,7 +95,7 @@ export const serverFetch = async (
 // Jellyfin token and only runs the query against that user's playback data.
 const fetchThroughServer = async (queryString: string): Promise<Response> => {
   const api = await getAuthenticatedJellyfinApi();
-  const res = await fetch("/api/playback-report", {
+  const res = await fetch(apiPath("/api/playback-report"), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${api.accessToken}`,

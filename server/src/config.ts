@@ -38,6 +38,22 @@ export interface Config {
   librarySyncMs: number;
   /** Optional TMDB key (v3 key or v4 read token) for finding posters of deleted items. */
   tmdbApiKey: string | undefined;
+  /** Path prefix everything is served under, e.g. "/wrapped/". Always starts and ends with "/". */
+  basePath: string;
+  /** If set, this server also serves the built frontend from this folder. */
+  staticDir: string | undefined;
+  /** Jellyfin address as browsers reach it (defaults to JELLYFIN_SERVER_URL). */
+  publicJellyfinUrl: string;
+}
+
+/** "wrapped", "/wrapped", "/wrapped/" -> "/wrapped/"; "" -> "/" */
+export function normalizeBasePath(raw: string | undefined): string {
+  const trimmed = (raw ?? "").trim().replace(/^\/+|\/+$/g, "");
+  if (trimmed === "") return "/";
+  if (!/^[A-Za-z0-9._~-]+(\/[A-Za-z0-9._~-]+)*$/.test(trimmed)) {
+    throw new Error("BASE_PATH may only contain letters, digits, . _ ~ - and /");
+  }
+  return `/${trimmed}/`;
 }
 
 function intFromEnv(
@@ -140,5 +156,8 @@ export function loadConfig(
     librarySyncMs:
       intFromEnv(env, "LIBRARY_SYNC_MINUTES", 60, 5, 10080) * 60 * 1000,
     tmdbApiKey: readOptionalSecret(env, "TMDB_API_KEY", readFile),
+    basePath: normalizeBasePath(env.BASE_PATH),
+    staticDir: env.STATIC_DIR || undefined,
+    publicJellyfinUrl: (env.PUBLIC_JELLYFIN_URL || jellyfinUrl).replace(/\/+$/, ""),
   };
 }

@@ -4,6 +4,7 @@ import { JellyfinClient, UpstreamError, isGuid, type JellyfinUser } from "./jell
 import type { Archive } from "./archive.js";
 import type { ImageStore } from "./images.js";
 import type { Syncer } from "./sync.js";
+import type { StaticSite } from "./static.js";
 import { UserDbCache } from "./cache.js";
 import {
   ConcurrencyGate,
@@ -132,10 +133,12 @@ export function createApp({
   config,
   jellyfin,
   archive,
+  site,
 }: {
   config: Config;
   jellyfin: JellyfinClient;
   archive?: ArchiveServices;
+  site?: StaticSite;
 }): App {
   // Loading a user's data is the expensive step. Many cold users at once would pile up
   // on the Jellyfin plugin and on memory, so only a few load at the same time.
@@ -310,9 +313,15 @@ export function createApp({
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
-    const path = url.pathname;
+    // Everything lives under BASE_PATH ("/" by default, "/wrapped/" behind a shared nginx).
+    const base = config.basePath;
+    const inBase =
+      url.pathname.startsWith(base) || url.pathname === base.slice(0, -1);
+    const path = "/" + url.pathname.slice(base.length);
 
     const run = async (): Promise<void> => {
+      // Nothing is served outside BASE_PATH.
+      if (!inBase) throw new HttpError(404, "Not found");
       if (path === "/api/health") {
         if (req.method !== "GET")
           throw new HttpError(405, "Method not allowed");
@@ -349,6 +358,15 @@ export function createApp({
         const services = requireArchive();
         await authenticateLimited(req, userLimiter);
         sendJson(res, 200, services.archive.stats());
+        return;
+      }
+      if (
+        site &&
+        inBase &&
+        !path.startsWith("/api/") &&
+        (req.method === "GET" || req.method === "HEAD")
+      ) {
+        site.serve(req, res, path);
         return;
       }
       throw new HttpError(404, "Not found");

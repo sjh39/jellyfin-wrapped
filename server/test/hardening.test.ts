@@ -117,6 +117,9 @@ describe("limits on the running server", () => {
       playSyncMs: 60000,
       librarySyncMs: 600000,
       tmdbApiKey: undefined,
+      basePath: "/",
+      staticDir: undefined,
+      publicJellyfinUrl: jellyfinUrl,
       ...overrides,
     };
     const app: App = createApp({

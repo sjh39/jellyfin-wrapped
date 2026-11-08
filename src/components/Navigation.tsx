@@ -26,6 +26,7 @@ const navigationItems = [
   { path: "/unfinished-shows", name: "Unfinished Shows" },
   { path: "/device-stats", name: "Device Stats" },
   { path: "/punch-card", name: "Activity Calendar" },
+  { path: "/credits", name: "About and credits" },
 ];
 
 const Navigation = () => {

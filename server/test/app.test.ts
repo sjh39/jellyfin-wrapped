@@ -43,6 +43,9 @@ describe("playback report proxy", () => {
       playSyncMs: 60000,
       librarySyncMs: 600000,
       tmdbApiKey: undefined,
+      basePath: "/",
+      staticDir: undefined,
+      publicJellyfinUrl: jellyfinUrl,
     };
     app = createApp({ config, jellyfin: new JellyfinClient(config) });
     await new Promise<void>((resolve) =>

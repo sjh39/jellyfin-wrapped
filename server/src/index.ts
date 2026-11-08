@@ -4,6 +4,7 @@ import { Archive } from "./archive.js";
 import { loadConfig } from "./config.js";
 import { ImageStore } from "./images.js";
 import { JellyfinClient } from "./jellyfin.js";
+import { StaticSite } from "./static.js";
 import { Syncer } from "./sync.js";
 
 const config = loadConfig();
@@ -18,11 +19,28 @@ const syncer = new Syncer(archive, jellyfin, images, {
   librarySyncMs: config.librarySyncMs,
 });
 
-const app = createApp({ config, jellyfin, archive: { archive, images, syncer } });
+// Optional: serve the web pages too (hosts without Docker/Apache, e.g. Ultra.cc).
+const site = config.staticDir
+  ? new StaticSite({
+      dir: config.staticDir,
+      basePath: config.basePath,
+      publicJellyfinUrl: config.publicJellyfinUrl,
+    })
+  : undefined;
+
+const app = createApp({
+  config,
+  jellyfin,
+  archive: { archive, images, syncer },
+  site,
+});
 
 app.server.listen(config.port, "0.0.0.0", () => {
   console.log(`[server] Listening on port ${config.port}`);
   console.log(`[server] Archive at ${config.archiveDir}`);
+  console.log(
+    `[server] Serving under ${config.basePath}${site ? " (web pages and API)" : " (API only)"}`
+  );
   syncer.start();
 });
 
