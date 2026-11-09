@@ -10,7 +10,7 @@ interface RowProps {
   /** A thumbnail. */
   art?: ReactNode;
   title: ReactNode;
-  /** Small text on the right. */
+  /** Small text: on the right in a wide row, under the title in a narrow one. */
   meta?: ReactNode;
 }
 
@@ -19,8 +19,10 @@ export function Row({ n, art, title, meta }: RowProps) {
     <li className="wp-row">
       {n !== undefined && <b className="wp-row-n">{n}</b>}
       {art}
-      <span className="wp-row-t">{title}</span>
-      {meta && <em className="wp-row-m">{meta}</em>}
+      <span className="wp-row-text">
+        <span className="wp-row-t">{title}</span>
+        {meta && <em className="wp-row-m">{meta}</em>}
+      </span>
     </li>
   );
 }

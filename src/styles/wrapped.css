@@ -300,17 +300,11 @@ body {
   min-width: 0;
 }
 
-/* Two ranked lists side by side on a wide screen (Top 10). */
+/* Ranked lists side by side when each gets at least 22rem; a lone list takes the full width. */
 .wp-cols {
   display: grid;
-  gap: 2.5rem;
-  grid-template-columns: minmax(0, 1fr);
-}
-@media (min-width: 900px) and (min-aspect-ratio: 5/4) {
-  .wp-cols {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4vw;
-  }
+  gap: 2.5rem 4vw;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
 }
 
 /* The one moment of motion: the headline slides up as the slide opens. */
@@ -337,6 +331,10 @@ body {
   }
   .wp-slide.wp-single {
     grid-template-columns: minmax(0, 1fr);
+  }
+  /* Stacked above its content, a sticky headline would slide over the list on scroll. */
+  .wp-single .wp-head {
+    position: static;
   }
 }
 
@@ -448,6 +446,7 @@ body {
 /* ---- ranked rows --------------------------------------------------------------------- */
 
 .wp-rows {
+  container-type: inline-size;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -471,24 +470,59 @@ body {
   font-size: 3.2rem;
   line-height: 1;
 }
-.wp-row-t {
+/* Title and meta share one box; the meta sits under the title until the list is wide
+   enough to give the title real room, so a title never gets squeezed into a sliver. */
+.wp-row-text {
   flex: 1;
   min-width: 0;
+}
+.wp-row-t {
+  display: block;
   font-stretch: 62%;
   font-weight: 900;
   text-transform: uppercase;
   font-size: clamp(1.5rem, 3.4vmin, 2.8rem);
   line-height: 0.95;
+  word-spacing: 0.14em;
   overflow-wrap: break-word;
 }
 .wp-row-m {
-  flex: none;
-  max-width: 11rem;
+  display: block;
+  margin-top: 0.35rem;
   font-style: normal;
   font-weight: 700;
   font-size: 1.1rem;
   line-height: 1.2;
-  text-align: right;
+}
+/* A phone-width list: smaller rank and thumbnail so a long word in a title still fits. */
+@container (max-width: 22rem) {
+  .wp-row {
+    gap: 0.75rem;
+  }
+  .wp-row-n {
+    min-width: 1.6ch;
+    font-size: 2.4rem;
+  }
+  .wp-row .wp-thumb {
+    width: 3rem;
+  }
+}
+@container (min-width: 36rem) {
+  .wp-row-text {
+    display: flex;
+    align-items: center;
+    gap: 1.1rem;
+  }
+  .wp-row-t {
+    flex: 1;
+    min-width: 0;
+  }
+  .wp-row-m {
+    flex: 0 1 auto;
+    max-width: 11rem;
+    margin-top: 0;
+    text-align: right;
+  }
 }
 
 /* ---- big numbers --------------------------------------------------------------------- */
@@ -525,6 +559,7 @@ body {
   text-transform: uppercase;
   font-size: clamp(2rem, 5.2vmin, 3.8rem);
   line-height: 0.95;
+  word-spacing: 0.14em;
 }
 .wp-note {
   margin: 0;

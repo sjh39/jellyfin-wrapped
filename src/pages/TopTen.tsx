@@ -64,7 +64,7 @@ export const TopTen = () => {
                       n={index + 1}
                       art={<ContentImage item={show.item} />}
                       title={show.item.name}
-                      meta={`${show.episodeCount} episodes, ${formatWatchTime(show.playbackTime / 60)}`}
+                      meta={`${show.episodeCount} ${show.episodeCount === 1 ? "episode" : "episodes"}, ${formatWatchTime(show.playbackTime / 60)}`}
                     />
                   )
                 )}
