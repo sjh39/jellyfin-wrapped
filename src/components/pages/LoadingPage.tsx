@@ -14,6 +14,7 @@ import { useMinutesPlayedPerDay } from "../../hooks/queries/useMinutesPlayedPerD
 import { useDeviceStats } from "../../hooks/queries/useDeviceStats";
 import { useCalendar } from "../../hooks/queries/useCalendar";
 import { useNewThisYear } from "../../hooks/queries/useNewThisYear";
+import { useMyRatings } from "../../hooks/queries/useMyRatings";
 import PageContainer from "../PageContainer";
 import { setNavDirection } from "@/lib/story";
 
@@ -49,6 +50,7 @@ export function LoadingPage() {
       message: "Checking what's new in the library...",
       query: useNewThisYear(),
     },
+    { message: "Reading your ratings...", query: useMyRatings() },
   ];
 
   // A query that failed is finished too; its own page shows the error.

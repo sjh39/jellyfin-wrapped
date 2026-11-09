@@ -2,19 +2,27 @@
 //   plays     every PLAY_SYNC_MINUTES  (new plugin rows, plus the items they refer to)
 //   library   every LIBRARY_SYNC_MINUTES (all items in every library, who can see which
 //             library, and marks items that disappeared as deleted)
+//   reviews   with each library pass, star ratings from the Jellyfin Enhanced plugin
 //   posters   after each pass, saves Jellyfin's poster for played items, movies and shows
-import { compactItem, type Archive, type ArchivedItem } from "./archive.js";
-import { isGuid, type JellyfinClient } from "./jellyfin.js";
+import {
+  compactItem,
+  type Archive,
+  type ArchivedItem,
+  type PluginReview,
+} from "./archive.js";
+import { isGuid, UpstreamError, type JellyfinClient } from "./jellyfin.js";
 import type { ImageStore } from "./images.js";
 import { logEvent } from "./limits.js";
 
 const PAGE_SIZE = 500;
 const IDS_PER_REQUEST = 100;
+const REVIEWS_PAGE = 1000;
 const IMAGES_PER_PASS = 500;
 const IMAGE_CONCURRENCY = 4;
 /** Re-read plays a little before the newest archived one, in case rows were updated. */
 const PLAY_OVERLAP_MS = 24 * 60 * 60 * 1000;
-const ITEM_TYPES = "Movie,Series,Season,Episode,MusicAlbum,Audio,MusicVideo,Video";
+const ITEM_TYPES =
+  "Movie,Series,Season,Episode,MusicAlbum,Audio,MusicVideo,Video";
 const ITEM_FIELDS =
   "ParentId,People,Genres,ProviderIds,DateCreated,PremiereDate,ProductionYear";
 
@@ -22,13 +30,21 @@ interface ItemsPage {
   Items?: Record<string, unknown>[];
   TotalRecordCount?: number;
 }
+interface ReviewsPage {
+  reviews?: PluginReview[];
+  total?: number;
+}
 interface VirtualFolder {
   ItemId?: string;
   Name?: string;
 }
 interface JellyfinUserDto {
   Id?: string;
-  Policy?: { EnableAllFolders?: boolean; EnabledFolders?: string[]; IsDisabled?: boolean };
+  Policy?: {
+    EnableAllFolders?: boolean;
+    EnabledFolders?: string[];
+    IsDisabled?: boolean;
+  };
 }
 
 /** "2025-03-01T12:00:00Z" -> "2025-03-01 12:00:00" (the plugin's format) */
@@ -54,7 +70,10 @@ export class Syncer {
     void this.syncLibrary().finally(() => void this.syncPlays());
     this.timers.push(
       setInterval(() => void this.syncPlays(), this.options.playSyncMs).unref(),
-      setInterval(() => void this.syncLibrary(), this.options.librarySyncMs).unref()
+      setInterval(
+        () => void this.syncLibrary(),
+        this.options.librarySyncMs
+      ).unref()
     );
   }
 
@@ -71,7 +90,9 @@ export class Syncer {
 
   syncPlays(): Promise<void> {
     this.playsRunning ??= this.runPlays()
-      .catch((error: unknown) => logEvent("sync_plays_failed", { error: String(error) }))
+      .catch((error: unknown) =>
+        logEvent("sync_plays_failed", { error: String(error) })
+      )
       .finally(() => {
         this.playsRunning = null;
       });
@@ -80,7 +101,9 @@ export class Syncer {
 
   syncLibrary(): Promise<void> {
     this.libraryRunning ??= this.runLibrary()
-      .catch((error: unknown) => logEvent("sync_library_failed", { error: String(error) }))
+      .catch((error: unknown) =>
+        logEvent("sync_library_failed", { error: String(error) })
+      )
       .finally(() => {
         this.libraryRunning = null;
       });
@@ -103,10 +126,14 @@ export class Syncer {
     // that happens before the next library pass.
     const unknown = this.archive.unknownPlayedItems();
     if (unknown.length > 0) {
-      const found = await this.fetchItemsWithParents(unknown.map((u) => u.ItemId));
+      const found = await this.fetchItemsWithParents(
+        unknown.map((u) => u.ItemId)
+      );
       const now = new Date().toISOString();
       this.archive.upsertItems(found, null, now);
-      const stillMissing = unknown.filter((u) => !this.archive.hasItem(u.ItemId));
+      const stillMissing = unknown.filter(
+        (u) => !this.archive.hasItem(u.ItemId)
+      );
       if (stillMissing.length > 0) {
         const rebuilt = this.archive.synthesizeFromPlays(stillMissing, now);
         logEvent("sync_rebuilt_items", { count: rebuilt });
@@ -118,7 +145,9 @@ export class Syncer {
 
   private async runLibrary(): Promise<void> {
     const passStart = new Date().toISOString();
-    const folders = await this.jellyfin.adminGet<VirtualFolder[]>("/Library/VirtualFolders");
+    const folders = await this.jellyfin.adminGet<VirtualFolder[]>(
+      "/Library/VirtualFolders"
+    );
     let total = 0;
     for (const folder of folders) {
       if (!folder.ItemId || !isGuid(folder.ItemId)) continue;
@@ -141,6 +170,7 @@ export class Syncer {
     const deleted = this.archive.markMissingAsDeleted(passStart);
     await this.syncUserAccess();
     logEvent("sync_library", { items: total, newlyDeleted: deleted });
+    await this.syncReviews();
     await this.saveImages();
   }
 
@@ -154,10 +184,36 @@ export class Syncer {
         id,
         user.Policy?.EnableAllFolders
           ? ["*"]
-          : (user.Policy?.EnabledFolders ?? []).map((f) => f.replace(/-/g, "").toLowerCase())
+          : (user.Policy?.EnabledFolders ?? []).map((f) =>
+              f.replace(/-/g, "").toLowerCase()
+            )
       );
     }
     this.archive.setUserLibraries(access);
+  }
+
+  /**
+   * Copy every user's reviews from Jellyfin Enhanced. Without the plugin, or if it
+   * fails, the reviews already archived are kept as they are.
+   */
+  private async syncReviews(): Promise<void> {
+    const reviews: PluginReview[] = [];
+    try {
+      for (let offset = 0; ; offset += REVIEWS_PAGE) {
+        const page = await this.jellyfin.adminGet<ReviewsPage>(
+          `/JellyfinEnhanced/reviews/admin/all?limit=${REVIEWS_PAGE}&offset=${offset}`
+        );
+        reviews.push(...(page.reviews ?? []));
+        if ((page.reviews ?? []).length < REVIEWS_PAGE) break;
+      }
+    } catch (error) {
+      // 404: the plugin is not installed, which is fine.
+      if (!(error instanceof UpstreamError && error.status === 404)) {
+        logEvent("sync_reviews_failed", { error: String(error) });
+      }
+      return;
+    }
+    logEvent("sync_reviews", { reviews: this.archive.replaceReviews(reviews) });
   }
 
   /** Fetch items by id, then the seasons, shows and albums they belong to. */
@@ -182,8 +238,18 @@ export class Syncer {
           const item = compactItem(raw);
           if (!item) continue;
           out.push(item);
-          for (const parent of [item.ParentId, item.SeriesId, item.SeasonId, item.AlbumId]) {
-            if (parent && isGuid(parent) && !seen.has(parent) && !this.archive.hasItem(parent))
+          for (const parent of [
+            item.ParentId,
+            item.SeriesId,
+            item.SeasonId,
+            item.AlbumId,
+          ]) {
+            if (
+              parent &&
+              isGuid(parent) &&
+              !seen.has(parent) &&
+              !this.archive.hasItem(parent)
+            )
               next.push(parent);
           }
         }
@@ -198,7 +264,9 @@ export class Syncer {
     let saved = 0;
     for (let i = 0; i < ids.length; i += IMAGE_CONCURRENCY) {
       const results = await Promise.all(
-        ids.slice(i, i + IMAGE_CONCURRENCY).map((id) => this.images.saveFromJellyfin(id))
+        ids
+          .slice(i, i + IMAGE_CONCURRENCY)
+          .map((id) => this.images.saveFromJellyfin(id))
       );
       saved += results.filter(Boolean).length;
     }

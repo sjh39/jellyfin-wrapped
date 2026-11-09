@@ -28,6 +28,9 @@ import CriticallyAcclaimedPage from "./components/pages/CriticallyAcclaimedPage"
 import TopTenPage from "./components/pages/TopTenPage";
 import FirstWatchedPage from "./components/pages/FirstWatchedPage";
 import NewThisYearPage from "./components/pages/NewThisYearPage";
+import TopRatedPage from "./components/pages/TopRatedPage";
+import VsCriticsPage from "./components/pages/VsCriticsPage";
+import CriticProfilePage from "./components/pages/CriticProfilePage";
 import CreditsPage from "./components/pages/CreditsPage";
 import { useEffect } from "react";
 import ActivityCalendarPage from "./components/pages/ActivityCalendarPage";
@@ -122,6 +125,18 @@ const router = createBrowserRouter(
         {
           path: "/critically-acclaimed",
           element: <CriticallyAcclaimedPage />,
+        },
+        {
+          path: "/your-top-rated",
+          element: <TopRatedPage />,
+        },
+        {
+          path: "/you-vs-everyone",
+          element: <VsCriticsPage />,
+        },
+        {
+          path: "/you-the-critic",
+          element: <CriticProfilePage />,
         },
         {
           path: "/credits",

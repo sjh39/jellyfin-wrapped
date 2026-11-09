@@ -531,6 +531,7 @@ body {
   display: grid;
   gap: 0.4rem;
   margin: 0;
+  container-type: inline-size;
 }
 .wp-stat-n {
   font-stretch: 62%;
@@ -538,12 +539,23 @@ body {
   line-height: 0.82;
   font-size: clamp(6rem, min(36vw, 40vh), 22rem);
 }
+/* Where supported, also keep the number inside its column (a glyph is about 0.62em). */
+@supports (width: 1cqi) {
+  .wp-stat-n {
+    font-size: clamp(
+      3rem,
+      min(36vw, 40vh, calc(100cqi / (var(--chars, 4) * 0.62))),
+      22rem
+    );
+  }
+}
 .wp-stat-l {
   font-stretch: 62%;
   font-weight: 900;
   text-transform: uppercase;
   line-height: 1;
   font-size: clamp(2.4rem, min(12vw, 13vh), 8rem);
+  word-spacing: 0.14em;
 }
 
 .wp-panel {

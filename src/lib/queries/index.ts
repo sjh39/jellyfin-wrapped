@@ -45,3 +45,6 @@ export * from "./first-watched";
 
 // New this year
 export * from "./new-this-year";
+
+// Ratings (Jellyfin Enhanced)
+export * from "./reviews";

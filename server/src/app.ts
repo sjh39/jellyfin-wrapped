@@ -1,6 +1,11 @@
 import http from "node:http";
 import type { Config } from "./config.js";
-import { JellyfinClient, UpstreamError, isGuid, type JellyfinUser } from "./jellyfin.js";
+import {
+  JellyfinClient,
+  UpstreamError,
+  isGuid,
+  type JellyfinUser,
+} from "./jellyfin.js";
 import type { Archive } from "./archive.js";
 import type { ImageStore } from "./images.js";
 import type { Syncer } from "./sync.js";
@@ -241,7 +246,10 @@ export function createApp({
       ids.length > MAX_ITEM_IDS ||
       !ids.every((id) => isGuid(id))
     ) {
-      throw new HttpError(400, `Body must be {"ids": [up to ${MAX_ITEM_IDS} item ids]}`);
+      throw new HttpError(
+        400,
+        `Body must be {"ids": [up to ${MAX_ITEM_IDS} item ids]}`
+      );
     }
     sendJson(res, 200, {
       Items: services.archive.itemsForUser(user.id, ids as string[]),
@@ -263,6 +271,24 @@ export function createApp({
     }
     sendJson(res, 200, {
       Items: services.archive.additionsForUser(user.id, start, end),
+    });
+  }
+
+  /** GET /api/reviews?start=YYYY-MM-DD&end=YYYY-MM-DD -> this user's own star ratings. */
+  async function handleReviews(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    url: URL
+  ): Promise<void> {
+    const services = requireArchive();
+    const user = await authenticateLimited(req, userLimiter);
+    const start = url.searchParams.get("start") ?? "";
+    const end = url.searchParams.get("end") ?? "";
+    if (!DATE_PARAM.test(start) || !DATE_PARAM.test(end)) {
+      throw new HttpError(400, "start and end must be YYYY-MM-DD");
+    }
+    sendJson(res, 200, {
+      Reviews: services.archive.reviewsForUser(user.id, start, end),
     });
   }
 
@@ -345,6 +371,12 @@ export function createApp({
         if (req.method !== "GET")
           throw new HttpError(405, "Method not allowed");
         await handleAdditions(req, res, url);
+        return;
+      }
+      if (path === "/api/reviews") {
+        if (req.method !== "GET")
+          throw new HttpError(405, "Method not allowed");
+        await handleReviews(req, res, url);
         return;
       }
       if (path.startsWith("/api/image/")) {

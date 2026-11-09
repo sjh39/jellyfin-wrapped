@@ -23,6 +23,27 @@ export const PLAY_COLUMNS: ColumnDef[] = [
   { name: "PlayDuration", type: "INT" },
 ];
 
+/** One review as the Jellyfin Enhanced plugin returns it. */
+export interface PluginReview {
+  userId?: string | null;
+  mediaType?: string | null;
+  tmdbId?: string | null;
+  rating?: number | null;
+  content?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface ReviewForUser {
+  Rating: number | null;
+  Content: string | null;
+  CreatedAt: string | null;
+  UpdatedAt: string | null;
+  Item: ArchivedItem & { Deleted: boolean };
+}
+
+const TMDB_KEY = /^(\d+)(?::s(\d+)(?::e(\d+))?)?$/;
+
 /** The parts of a Jellyfin item the frontend uses. Stored as JSON. */
 export interface ArchivedItem {
   Id: string;
@@ -40,7 +61,14 @@ export interface ArchivedItem {
   RunTimeTicks?: number | null;
   Genres?: string[] | null;
   GenreItems?: { Name?: string | null; Id?: string }[] | null;
-  People?: { Id?: string; Name?: string | null; Role?: string | null; Type?: string | null }[] | null;
+  People?:
+    | {
+        Id?: string;
+        Name?: string | null;
+        Role?: string | null;
+        Type?: string | null;
+      }[]
+    | null;
   ProviderIds?: Record<string, string | null> | null;
   DateCreated?: string | null;
   AlbumId?: string | null;
@@ -201,6 +229,20 @@ export class Archive {
         Key TEXT PRIMARY KEY,
         Value TEXT
       );
+
+      -- Star ratings and reviews from the Jellyfin Enhanced plugin, keyed the way it keys
+      -- them: TmdbKey is "603" for a movie or show, "1399:s1" for a season, "1399:s1:e2"
+      -- for an episode.
+      CREATE TABLE IF NOT EXISTS reviews (
+        UserId TEXT NOT NULL,
+        MediaType TEXT NOT NULL,
+        TmdbKey TEXT NOT NULL,
+        Rating REAL,
+        Content TEXT,
+        CreatedAt TEXT,
+        UpdatedAt TEXT,
+        PRIMARY KEY (UserId, MediaType, TmdbKey)
+      );
     `);
   }
 
@@ -220,7 +262,9 @@ export class Archive {
   }
 
   getMeta(key: string): string | null {
-    const row = this.db.prepare("SELECT Value FROM meta WHERE Key = ?").get(key);
+    const row = this.db
+      .prepare("SELECT Value FROM meta WHERE Key = ?")
+      .get(key);
     return str(row?.Value);
   }
 
@@ -279,7 +323,9 @@ export class Archive {
   }
 
   latestPlayDate(): string | null {
-    const row = this.db.prepare("SELECT MAX(DateCreated) AS d FROM plays").get();
+    const row = this.db
+      .prepare("SELECT MAX(DateCreated) AS d FROM plays")
+      .get();
     return str(row?.d);
   }
 
@@ -304,7 +350,11 @@ export class Archive {
   }
 
   /** Played item ids that the archive knows nothing about yet. */
-  unknownPlayedItems(): { ItemId: string; ItemType: string | null; ItemName: string | null }[] {
+  unknownPlayedItems(): {
+    ItemId: string;
+    ItemType: string | null;
+    ItemName: string | null;
+  }[] {
     return this.db
       .prepare(
         `SELECT ItemId, MAX(ItemType) AS ItemType, MAX(ItemName) AS ItemName
@@ -338,7 +388,11 @@ export class Archive {
   }
 
   /** Save items seen in Jellyfin right now. Marks them as present again. */
-  upsertItems(items: ArchivedItem[], libraryId: string | null, now: string): void {
+  upsertItems(
+    items: ArchivedItem[],
+    libraryId: string | null,
+    now: string
+  ): void {
     const upsert = this.db.prepare(`
       INSERT INTO items (Id, Type, Name, ParentId, LibraryId, DateCreated, Json,
                          FirstSeen, LastSeen, Deleted, Synthetic)
@@ -393,7 +447,11 @@ export class Archive {
    * attached to its show if the show is still known, otherwise to a rebuilt show.
    */
   synthesizeFromPlays(
-    missing: { ItemId: string; ItemType: string | null; ItemName: string | null }[],
+    missing: {
+      ItemId: string;
+      ItemType: string | null;
+      ItemName: string | null;
+    }[],
     now: string
   ): number {
     const insert = this.db.prepare(`
@@ -436,7 +494,8 @@ export class Archive {
           continue;
         }
         const seriesId =
-          str(findSeries.get(parsed.series)?.Id) ?? syntheticId("series", parsed.series);
+          str(findSeries.get(parsed.series)?.Id) ??
+          syntheticId("series", parsed.series);
         add({ Id: seriesId, Name: parsed.series, Type: "Series" }, m.ItemId);
         const seasonId =
           str(findSeason.get(seriesId, parsed.season)?.Id) ??
@@ -505,7 +564,10 @@ export class Archive {
     )`;
 
   /** Archived items by id, limited to what this user may see. */
-  itemsForUser(userId: string, ids: string[]): (ArchivedItem & { Deleted: boolean })[] {
+  itemsForUser(
+    userId: string,
+    ids: string[]
+  ): (ArchivedItem & { Deleted: boolean })[] {
     if (ids.length === 0) return [];
     const stmt = this.db.prepare(
       `SELECT i.Json, i.Deleted FROM items i
@@ -525,7 +587,8 @@ export class Archive {
   }
 
   canUserSee(userId: string, id: string): boolean {
-    if (this.db.prepare("SELECT 1 FROM people WHERE Id = ?").get(id)) return true;
+    if (this.db.prepare("SELECT 1 FROM people WHERE Id = ?").get(id))
+      return true;
     return !!this.db
       .prepare(`SELECT 1 FROM items i WHERE i.Id = $id AND ${Archive.VISIBLE}`)
       .get({ id, user: userId });
@@ -556,14 +619,128 @@ export class Archive {
       }));
   }
 
+  // ---- reviews ----------------------------------------------------------
+
+  /**
+   * Make the archive's reviews match the plugin's. Unlike plays, a review the author
+   * deleted is gone for good: it was their choice, not something Jellyfin forgot.
+   */
+  replaceReviews(reviews: PluginReview[]): number {
+    const insert = this.db.prepare(
+      `INSERT OR REPLACE INTO reviews (UserId, MediaType, TmdbKey, Rating, Content, CreatedAt, UpdatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    );
+    let count = 0;
+    this.transaction(() => {
+      this.db.exec("DELETE FROM reviews");
+      for (const r of reviews) {
+        const user =
+          typeof r.userId === "string"
+            ? r.userId.replace(/-/g, "").toLowerCase()
+            : "";
+        const type = r.mediaType;
+        const key = r.tmdbId ?? "";
+        if (
+          !/^[0-9a-f]{32}$/.test(user) ||
+          (type !== "movie" && type !== "tv") ||
+          !TMDB_KEY.test(key)
+        )
+          continue;
+        const rating =
+          typeof r.rating === "number" && Number.isFinite(r.rating)
+            ? r.rating
+            : null;
+        insert.run(
+          user,
+          type,
+          key,
+          rating,
+          r.content ?? null,
+          r.createdAt ?? null,
+          r.updatedAt ?? null
+        );
+        count++;
+      }
+    });
+    return count;
+  }
+
+  /**
+   * One user's reviews written or last changed in a date range, each matched to the
+   * movie, show, season or episode it is about. Reviews of things this user cannot see,
+   * or that the archive has never heard of, are left out.
+   */
+  reviewsForUser(userId: string, start: string, end: string): ReviewForUser[] {
+    const rows = this.db
+      .prepare(
+        `SELECT MediaType, TmdbKey, Rating, Content, CreatedAt, UpdatedAt FROM reviews
+          WHERE UserId = $user
+            AND COALESCE(NULLIF(UpdatedAt, ''), CreatedAt) >= $start
+            AND COALESCE(NULLIF(UpdatedAt, ''), CreatedAt) < $end`
+      )
+      .all({ user: userId, start, end });
+    const series = `SELECT Id FROM items WHERE Type = 'Series' AND json_extract(Json, '$.ProviderIds.Tmdb') = $tmdb`;
+    const lookups = {
+      movie: `i.Type = 'Movie' AND json_extract(i.Json, '$.ProviderIds.Tmdb') = $tmdb`,
+      show: `i.Type = 'Series' AND json_extract(i.Json, '$.ProviderIds.Tmdb') = $tmdb`,
+      season: `i.Type = 'Season' AND json_extract(i.Json, '$.IndexNumber') = $season
+               AND json_extract(i.Json, '$.SeriesId') IN (${series})`,
+      episode: `i.Type = 'Episode' AND json_extract(i.Json, '$.ParentIndexNumber') = $season
+                AND json_extract(i.Json, '$.IndexNumber') = $episode
+                AND json_extract(i.Json, '$.SeriesId') IN (${series})`,
+    };
+    const out: ReviewForUser[] = [];
+    for (const r of rows) {
+      const m = TMDB_KEY.exec(String(r.TmdbKey));
+      if (!m) continue;
+      const [, tmdb, season, episode] = m;
+      const kind =
+        r.MediaType === "movie"
+          ? "movie"
+          : episode
+            ? "episode"
+            : season
+              ? "season"
+              : "show";
+      const found = this.db
+        .prepare(
+          `SELECT i.Json, i.Deleted FROM items i
+            WHERE ${lookups[kind]} AND ${Archive.VISIBLE}
+            ORDER BY i.Deleted LIMIT 1`
+        )
+        .get({
+          user: userId,
+          tmdb: tmdb!,
+          ...(season ? { season: Number(season) } : {}),
+          ...(episode ? { episode: Number(episode) } : {}),
+        });
+      if (!found) continue;
+      out.push({
+        Rating: typeof r.Rating === "number" ? r.Rating : null,
+        Content: str(r.Content),
+        CreatedAt: str(r.CreatedAt),
+        UpdatedAt: str(r.UpdatedAt),
+        Item: {
+          ...(JSON.parse(String(found.Json)) as ArchivedItem),
+          Deleted: Number(found.Deleted) === 1,
+        },
+      });
+    }
+    return out;
+  }
+
   personName(id: string): string | null {
-    return str(this.db.prepare("SELECT Name FROM people WHERE Id = ?").get(id)?.Name);
+    return str(
+      this.db.prepare("SELECT Name FROM people WHERE Id = ?").get(id)?.Name
+    );
   }
 
   // ---- images -----------------------------------------------------------
 
   getImage(id: string): ImageRecord | null {
-    const row = this.db.prepare("SELECT * FROM images WHERE Id = ?").get(id) as Row | undefined;
+    const row = this.db.prepare("SELECT * FROM images WHERE Id = ?").get(id) as
+      | Row
+      | undefined;
     if (!row) return null;
     return {
       file: str(row.File),
@@ -617,7 +794,8 @@ export class Archive {
   }
 
   stats(): Record<string, number> {
-    const n = (sql: string): number => Number(this.db.prepare(sql).get()?.n ?? 0);
+    const n = (sql: string): number =>
+      Number(this.db.prepare(sql).get()?.n ?? 0);
     return {
       plays: n("SELECT COUNT(*) AS n FROM plays"),
       items: n("SELECT COUNT(*) AS n FROM items"),

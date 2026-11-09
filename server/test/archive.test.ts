@@ -5,7 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
-import { Archive, PLAY_COLUMNS, parseEpisodeName, syntheticId } from "../src/archive.js";
+import {
+  Archive,
+  PLAY_COLUMNS,
+  parseEpisodeName,
+  syntheticId,
+} from "../src/archive.js";
 import { createApp, type App } from "../src/app.js";
 import type { Config } from "../src/config.js";
 import { ImageStore } from "../src/images.js";
@@ -27,8 +32,24 @@ const PNG = Buffer.from(
   "hex"
 );
 
-const playRow = (id: number, date: string, user: string, item: string, type: string, name: string) => [
-  String(id), date, user, item, type, name, "DirectPlay", "web", "tv", "3600",
+const playRow = (
+  id: number,
+  date: string,
+  user: string,
+  item: string,
+  type: string,
+  name: string
+) => [
+  String(id),
+  date,
+  user,
+  item,
+  type,
+  name,
+  "DirectPlay",
+  "web",
+  "tv",
+  "3600",
 ];
 
 describe("archive", () => {
@@ -57,17 +78,34 @@ describe("archive", () => {
 
   it("rebuilds a deleted episode under its show when the show is still known", () => {
     const a = new Archive(":memory:");
-    a.upsertItems([{ Id: SERIES, Name: "The Show", Type: "Series" }], LIB_MOVIES, "2025-01-01");
+    a.upsertItems(
+      [{ Id: SERIES, Name: "The Show", Type: "Series" }],
+      LIB_MOVIES,
+      "2025-01-01"
+    );
     a.upsertPlays({
       columns: PLAY_COLUMNS,
-      rows: [playRow(1, "2025-02-01 10:00:00", U1, EP_GONE, "Episode", "The Show - s01e03 - Gone")],
+      rows: [
+        playRow(
+          1,
+          "2025-02-01 10:00:00",
+          U1,
+          EP_GONE,
+          "Episode",
+          "The Show - s01e03 - Gone"
+        ),
+      ],
     });
     a.synthesizeFromPlays(a.unknownPlayedItems(), "2025-03-01");
     const ep = a.getItem(EP_GONE);
     assert.equal(ep?.Type, "Episode");
     assert.equal(ep?.Name, "Gone");
     const season = a.getItem(ep!.ParentId!);
-    assert.equal(season?.ParentId, SERIES, "episode should hang off the real show");
+    assert.equal(
+      season?.ParentId,
+      SERIES,
+      "episode should hang off the real show"
+    );
     a.close();
   });
 
@@ -75,7 +113,16 @@ describe("archive", () => {
     const a = new Archive(":memory:");
     a.upsertPlays({
       columns: PLAY_COLUMNS,
-      rows: [playRow(1, "2025-02-01 10:00:00", U1, EP_GONE, "Episode", "Other Show - s01e01 - A")],
+      rows: [
+        playRow(
+          1,
+          "2025-02-01 10:00:00",
+          U1,
+          EP_GONE,
+          "Episode",
+          "Other Show - s01e01 - A"
+        ),
+      ],
     });
     a.synthesizeFromPlays(a.unknownPlayedItems(), "2025-03-01");
     const season = a.getItem(a.getItem(EP_GONE)!.ParentId!);
@@ -88,12 +135,107 @@ describe("archive", () => {
 
   it("only shows items from libraries the user can open", () => {
     const a = new Archive(":memory:");
-    a.upsertItems([{ Id: MOVIE, Name: "Public", Type: "Movie" }], LIB_MOVIES, "2025-01-01");
-    a.upsertItems([{ Id: PRIVATE_MOVIE, Name: "Private", Type: "Movie" }], LIB_PRIVATE, "2025-01-01");
-    a.setUserLibraries(new Map([[U1, ["*"]], [U2, [LIB_MOVIES]]]));
+    a.upsertItems(
+      [{ Id: MOVIE, Name: "Public", Type: "Movie" }],
+      LIB_MOVIES,
+      "2025-01-01"
+    );
+    a.upsertItems(
+      [{ Id: PRIVATE_MOVIE, Name: "Private", Type: "Movie" }],
+      LIB_PRIVATE,
+      "2025-01-01"
+    );
+    a.setUserLibraries(
+      new Map([
+        [U1, ["*"]],
+        [U2, [LIB_MOVIES]],
+      ])
+    );
     assert.equal(a.itemsForUser(U1, [MOVIE, PRIVATE_MOVIE]).length, 2);
-    assert.deepEqual(a.itemsForUser(U2, [MOVIE, PRIVATE_MOVIE]).map((i) => i.Id), [MOVIE]);
+    assert.deepEqual(
+      a.itemsForUser(U2, [MOVIE, PRIVATE_MOVIE]).map((i) => i.Id),
+      [MOVIE]
+    );
     assert.equal(a.canUserSee(U2, PRIVATE_MOVIE), false);
+    a.close();
+  });
+});
+
+describe("reviews", () => {
+  it("matches season and episode ratings to their items and replaces deleted reviews", () => {
+    const a = new Archive(":memory:");
+    a.upsertItems(
+      [
+        {
+          Id: SERIES,
+          Name: "The Show",
+          Type: "Series",
+          ProviderIds: { Tmdb: "1399" },
+        },
+        {
+          Id: SEASON,
+          Name: "Season 1",
+          Type: "Season",
+          SeriesId: SERIES,
+          IndexNumber: 1,
+        },
+        {
+          Id: EP_GONE,
+          Name: "Pilot",
+          Type: "Episode",
+          SeriesId: SERIES,
+          ParentIndexNumber: 1,
+          IndexNumber: 2,
+        },
+      ],
+      LIB_MOVIES,
+      "2025-01-01"
+    );
+    a.setUserLibraries(new Map([[U1, ["*"]]]));
+    const at = "2025-06-01T00:00:00Z";
+    a.replaceReviews([
+      {
+        userId: U1,
+        mediaType: "tv",
+        tmdbId: "1399",
+        rating: 5,
+        createdAt: at,
+        updatedAt: at,
+      },
+      {
+        userId: U1,
+        mediaType: "tv",
+        tmdbId: "1399:s1",
+        rating: 4,
+        createdAt: at,
+        updatedAt: at,
+      },
+      {
+        userId: U1,
+        mediaType: "tv",
+        tmdbId: "1399:s1:e2",
+        rating: 3,
+        createdAt: at,
+        updatedAt: at,
+      },
+      {
+        userId: U1,
+        mediaType: "tv",
+        tmdbId: "1399:s1:e9",
+        rating: 2,
+        createdAt: at,
+        updatedAt: at,
+      },
+      { userId: "not-a-user", mediaType: "tv", tmdbId: "1399", rating: 1 },
+    ]);
+    const found = a.reviewsForUser(U1, "2025-01-01", "2026-01-01");
+    assert.deepEqual(found.map((r) => [r.Rating, r.Item.Id]).sort(), [
+      [3, EP_GONE],
+      [4, SEASON],
+      [5, SERIES],
+    ]);
+    a.replaceReviews([]);
+    assert.equal(a.reviewsForUser(U1, "2025-01-01", "2026-01-01").length, 0);
     a.close();
   });
 });
@@ -121,24 +263,72 @@ describe("deleted items end to end", () => {
         Type: "Movie",
         DateCreated: "2025-03-01T12:00:00.0000000Z",
         ProductionYear: 2020,
+        ProviderIds: { Tmdb: "603" },
       };
       if (url.pathname === "/Users/Me") return json({ Id: U1, Name: "u1" });
       if (url.pathname === "/user_usage_stats/submit_custom_query") {
         let body = "";
         req.on("data", (c: Buffer) => (body += c.toString()));
         req.on("end", () => {
-          const q = (JSON.parse(body) as { CustomQueryString: string }).CustomQueryString;
-          if (q.includes("pragma_table_info")) return json({ colums: ["name", "type"], results: [] });
+          const q = (JSON.parse(body) as { CustomQueryString: string })
+            .CustomQueryString;
+          if (q.includes("pragma_table_info"))
+            return json({ colums: ["name", "type"], results: [] });
           json({
             colums: ["__rowid", ...PLAY_COLUMNS.map((c) => c.name)],
-            results: [playRow(1, "2025-03-02 20:00:00", U1, MOVIE, "Movie", "Soon Deleted")],
+            results: [
+              playRow(
+                1,
+                "2025-03-02 20:00:00",
+                U1,
+                MOVIE,
+                "Movie",
+                "Soon Deleted"
+              ),
+            ],
           });
         });
         return;
       }
-      if (url.pathname === "/Library/VirtualFolders") return json([{ ItemId: LIB_MOVIES, Name: "Movies" }]);
-      if (url.pathname === "/Users") return json([{ Id: U1, Policy: { EnableAllFolders: true } }]);
-      if (url.pathname === "/Items") return json({ Items: movieDeleted ? [] : [movie] });
+      if (url.pathname === "/JellyfinEnhanced/reviews/admin/all") {
+        return json({
+          reviews: [
+            {
+              userId: U1,
+              mediaType: "movie",
+              tmdbId: "603",
+              rating: 4.5,
+              content: "Loved it",
+              createdAt: "2025-03-03T10:00:00.0000000Z",
+              updatedAt: "2025-03-03T10:00:00.0000000Z",
+            },
+            {
+              userId: U2,
+              mediaType: "movie",
+              tmdbId: "603",
+              rating: 1,
+              content: "Not for me",
+              createdAt: "2025-03-04T10:00:00Z",
+              updatedAt: "2025-03-04T10:00:00Z",
+            },
+            {
+              userId: U1,
+              mediaType: "tv",
+              tmdbId: "999",
+              rating: 3,
+              createdAt: "2025-03-05T10:00:00Z",
+              updatedAt: "2025-03-05T10:00:00Z",
+            },
+          ],
+          total: 3,
+        });
+      }
+      if (url.pathname === "/Library/VirtualFolders")
+        return json([{ ItemId: LIB_MOVIES, Name: "Movies" }]);
+      if (url.pathname === "/Users")
+        return json([{ Id: U1, Policy: { EnableAllFolders: true } }]);
+      if (url.pathname === "/Items")
+        return json({ Items: movieDeleted ? [] : [movie] });
       if (url.pathname === `/Items/${MOVIE}/Images/Primary` && !movieDeleted) {
         res.writeHead(200, { "Content-Type": "image/png" });
         return res.end(PNG);
@@ -176,8 +366,15 @@ describe("deleted items end to end", () => {
     const client = new JellyfinClient(config);
     archive = new Archive(join(dir, "archive.sqlite"));
     const images = new ImageStore(archive, client, dir, undefined);
-    syncer = new Syncer(archive, client, images, { playSyncMs: 60000, librarySyncMs: 600000 });
-    app = createApp({ config, jellyfin: client, archive: { archive, images, syncer } });
+    syncer = new Syncer(archive, client, images, {
+      playSyncMs: 60000,
+      librarySyncMs: 600000,
+    });
+    app = createApp({
+      config,
+      jellyfin: client,
+      archive: { archive, images, syncer },
+    });
     await new Promise<void>((r) => app.server.listen(0, "127.0.0.1", r));
     base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;
   });
@@ -196,20 +393,32 @@ describe("deleted items end to end", () => {
   it("keeps the movie, its play and its poster after Jellyfin deletes it", async () => {
     await syncer.syncLibrary();
     await syncer.syncPlays();
-    assert.equal(archive.getImage(MOVIE)?.source, "jellyfin", "poster saved while it existed");
+    assert.equal(
+      archive.getImage(MOVIE)?.source,
+      "jellyfin",
+      "poster saved while it existed"
+    );
 
     movieDeleted = true;
     await syncer.syncLibrary();
 
-    const additions = (await (await get("/api/library-additions?start=2025-01-01&end=2026-01-01")).json()) as {
+    const additions = (await (
+      await get("/api/library-additions?start=2025-01-01&end=2026-01-01")
+    ).json()) as {
       Items: { Id: string; Deleted: boolean; Played: boolean }[];
     };
-    assert.deepEqual(additions.Items.map((i) => [i.Id, i.Deleted, i.Played]), [[MOVIE, true, true]]);
+    assert.deepEqual(
+      additions.Items.map((i) => [i.Id, i.Deleted, i.Played]),
+      [[MOVIE, true, true]]
+    );
 
     const items = (await (
       await fetch(`${base}/api/items`, {
         method: "POST",
-        headers: { Authorization: "Bearer token-1", "Content-Type": "application/json" },
+        headers: {
+          Authorization: "Bearer token-1",
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ ids: [MOVIE] }),
       })
     ).json()) as { Items: { Name: string }[] };
@@ -222,11 +431,37 @@ describe("deleted items end to end", () => {
 
     const report = await fetch(`${base}/api/playback-report`, {
       method: "POST",
-      headers: { Authorization: "Bearer token-1", "Content-Type": "application/json" },
+      headers: {
+        Authorization: "Bearer token-1",
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ query: "SELECT ItemName FROM PlaybackActivity" }),
     });
     const rows = (await report.json()) as { results: string[][] };
     assert.deepEqual(rows.results, [["Soon Deleted"]]);
+  });
+
+  it("serves only the signed-in user's own ratings, matched by TMDB id, even after deletion", async () => {
+    const res = await get("/api/reviews?start=2025-01-01&end=2026-01-01");
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      Reviews: {
+        Rating: number;
+        Content: string;
+        Item: { Id: string; Deleted: boolean };
+      }[];
+    };
+    // U2's review of the same movie is not served; the show the archive never saw is dropped.
+    assert.deepEqual(
+      body.Reviews.map((r) => [r.Rating, r.Content, r.Item.Id, r.Item.Deleted]),
+      [[4.5, "Loved it", MOVIE, true]]
+    );
+    const outside = (await (
+      await get("/api/reviews?start=2026-01-01&end=2027-01-01")
+    ).json()) as {
+      Reviews: unknown[];
+    };
+    assert.equal(outside.Reviews.length, 0);
   });
 
   it("refuses images and items without a valid login", async () => {
