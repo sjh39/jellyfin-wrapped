@@ -40,8 +40,13 @@ Every page was rebuilt as a poster-wall "story":
 
 Slides: Top 10, First watched, Movies, TV shows, Music, Music videos, Favorite actors,
 Genres, Live TV, Critically acclaimed, Oldest movie, Oldest show, New this year, Holidays,
-Watch time, Show of the month, Unfinished shows, Devices, Activity calendar, About and
-credits.
+Watch time, Show of the month, Unfinished shows, Devices, Activity calendar, Who watched
+the most, Requests and downloads, About and credits.
+
+The two whole-server slides rank every user by hours of movies and of TV, by Seerr requests
+and by items downloaded. They show names and numbers only, never titles. Requests need Seerr:
+the server reuses the address and key from the Jellyfin Enhanced plugin, or set `SEERR_URL`
+and `SEERR_API_KEY_FILE`.
 
 ## Requirements
 

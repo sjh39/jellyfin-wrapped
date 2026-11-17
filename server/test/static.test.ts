@@ -20,7 +20,10 @@ describe("serving the app under a sub-path", () => {
   before(async () => {
     dir = mkdtempSync(join(tmpdir(), "wrapped-dist-"));
     mkdirSync(join(dir, "assets"));
-    writeFileSync(join(dir, "index.html"), "<html><head><title>W</title></head><body></body></html>");
+    writeFileSync(
+      join(dir, "index.html"),
+      "<html><head><title>W</title></head><body></body></html>"
+    );
     writeFileSync(join(dir, "assets", "app.js"), "console.log(1)");
     writeFileSync(join(tmpdir(), "outside.txt"), "outside");
     const config: Config = {
@@ -43,6 +46,8 @@ describe("serving the app under a sub-path", () => {
       playSyncMs: 60000,
       librarySyncMs: 600000,
       tmdbApiKey: TMDB,
+      seerrUrl: undefined,
+      seerrApiKey: undefined,
       basePath: "/wrapped/",
       staticDir: dir,
       publicJellyfinUrl: "https://media.example.com/jellyfin",
@@ -65,7 +70,12 @@ describe("serving the app under a sub-path", () => {
 
   const get = async (path: string) => {
     const res = await fetch(`${base}${path}`);
-    return { status: res.status, type: res.headers.get("content-type"), body: await res.text(), res };
+    return {
+      status: res.status,
+      type: res.headers.get("content-type"),
+      body: await res.text(),
+      res,
+    };
   };
 
   it("normalizes BASE_PATH", () => {
@@ -79,7 +89,10 @@ describe("serving the app under a sub-path", () => {
     const page = await get("/wrapped/");
     assert.equal(page.status, 200);
     assert.match(page.body, /<head><script src="\/wrapped\/env.js"><\/script>/);
-    assert.match(page.res.headers.get("content-security-policy") ?? "", /connect-src 'self' https:\/\/media.example.com/);
+    assert.match(
+      page.res.headers.get("content-security-policy") ?? "",
+      /connect-src 'self' https:\/\/media.example.com/
+    );
   });
 
   it("sends app routes to the page, and files as files", async () => {
@@ -96,7 +109,11 @@ describe("serving the app under a sub-path", () => {
   });
 
   it("never serves files outside the build folder", async () => {
-    for (const path of ["/wrapped/..%2Foutside.txt", "/wrapped/%2e%2e/outside.txt", "/wrapped/..%5Coutside.txt"]) {
+    for (const path of [
+      "/wrapped/..%2Foutside.txt",
+      "/wrapped/%2e%2e/outside.txt",
+      "/wrapped/..%5Coutside.txt",
+    ]) {
       const res = await get(path);
       assert.doesNotMatch(res.body, /^outside$/, path);
     }
@@ -104,8 +121,16 @@ describe("serving the app under a sub-path", () => {
 
   it("never sends the admin key or the TMDB key to the browser", async () => {
     const env = await get("/wrapped/env.js");
-    assert.equal(env.body.trim(), 'window.ENV = { JELLYFIN_SERVER_URL: "https://media.example.com/jellyfin" };');
-    for (const path of ["/wrapped/", "/wrapped/env.js", "/wrapped/movies", "/wrapped/assets/app.js"]) {
+    assert.equal(
+      env.body.trim(),
+      'window.ENV = { JELLYFIN_SERVER_URL: "https://media.example.com/jellyfin" };'
+    );
+    for (const path of [
+      "/wrapped/",
+      "/wrapped/env.js",
+      "/wrapped/movies",
+      "/wrapped/assets/app.js",
+    ]) {
       const { body } = await get(path);
       assert.ok(!body.includes(ADMIN) && !body.includes(TMDB), path);
     }

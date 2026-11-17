@@ -117,6 +117,8 @@ describe("limits on the running server", () => {
       playSyncMs: 60000,
       librarySyncMs: 600000,
       tmdbApiKey: undefined,
+      seerrUrl: undefined,
+      seerrApiKey: undefined,
       basePath: "/",
       staticDir: undefined,
       publicJellyfinUrl: jellyfinUrl,

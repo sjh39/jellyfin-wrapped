@@ -25,7 +25,7 @@ else's data, whatever it says.
 | Concern          | What the server does                                                                                                                             |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Admin API key    | Only ever sent to Jellyfin. Never in a response, a log line, or the browser.                                                                     |
-| Whose data       | Taken from the verified token. Cross-user queries return nothing.                                                                                |
+| Whose data       | Taken from the verified token. Cross-user queries return nothing, except `/api/leaderboard` (names and totals).                                  |
 | What SQL may run | One `SELECT` or `WITH` statement. No writes, no `ATTACH`, no `PRAGMA`. The database is also opened `query_only`.                                 |
 | Runaway queries  | Per-query timeout; the worker thread is terminated. Result limits in rows and bytes.                                                             |
 | Memory bombs     | SQLite hard heap limit per user database (`QUERY_MEMORY_LIMIT_MB`).                                                                              |
@@ -103,11 +103,13 @@ The server keeps its own copy of everything Wrapped needs in `ARCHIVE_DIR`
 
 How it works:
 
-| Job | When | What it does |
-| --- | --- | --- |
-| Plays | at start, every `PLAY_SYNC_MINUTES` (15), and before serving a user if older than a minute | Copies new plugin rows in. Items those plays refer to are archived immediately, with their season, show or album. |
-| Library | at start and every `LIBRARY_SYNC_MINUTES` (60) | Reads every library, records which users can open which library, and marks items that disappeared as deleted. |
-| Posters | after each pass | Saves Jellyfin's poster for every played item (and its show/season/album) and every movie and show. |
+| Job       | When                                                                                       | What it does                                                                                                                                                                                      |
+| --------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Plays     | at start, every `PLAY_SYNC_MINUTES` (15), and before serving a user if older than a minute | Copies new plugin rows in. Items those plays refer to are archived immediately, with their season, show or album.                                                                                 |
+| Library   | at start and every `LIBRARY_SYNC_MINUTES` (60)                                             | Reads every library, records which users can open which library, and marks items that disappeared as deleted.                                                                                     |
+| Downloads | with each plays pass                                                                       | Copies new "downloading" entries from Jellyfin's activity log, which forgets them after its retention.                                                                                            |
+| Requests  | with each library pass                                                                     | Copies every Seerr request (who and when). Uses `SEERR_URL` / `SEERR_API_KEY`, or else the Seerr address and key set in the Jellyfin Enhanced plugin. Requests Seerr later deletes stay archived. |
+| Posters   | after each pass                                                                            | Saves Jellyfin's poster for every played item (and its show/season/album) and every movie and show.                                                                                               |
 
 Items deleted before the archive existed are rebuilt from the plugin's play rows
 (episodes are attached to their show if the show is still known). Their posters are
@@ -122,6 +124,10 @@ can see: items in libraries they can open, or items they played):
 - `GET /api/library-additions?start=YYYY-MM-DD&end=YYYY-MM-DD`: items added in a range,
   with `Deleted` and `Played`
 - `GET /api/image/<id>`: poster
+- `GET /api/leaderboard?start=YYYY-MM-DD&end=YYYY-MM-DD`: every enabled user's name with
+  their distinct items downloaded, Seerr requests, and seconds of movies and of TV
+  played. Numbers only, never what was watched. This is the only endpoint that shows
+  one user anything about another.
 - `GET /api/archive/status`: counts of archived plays, items, deleted items and posters
 
 Back up `ARCHIVE_DIR`. It is the only copy of anything that has since been deleted.
@@ -139,12 +145,12 @@ cd server && npm ci && npm run build
 
 Settings (in `.env.server`, which git ignores):
 
-| Setting | Example | Purpose |
-| --- | --- | --- |
-| `BASE_PATH` | `/wrapped/` | Prefix for the pages and the API. Same value as the build. |
-| `STATIC_DIR` | `/home/you/jellyfin-wrapped/dist` | Serve the built pages from this server. |
-| `PUBLIC_JELLYFIN_URL` | `https://you.host.usbx.me/jellyfin` | Jellyfin as browsers reach it, if different. |
-| `TRUST_PROXY_HOPS` | `1` | One reverse proxy (the host's nginx) in front. |
+| Setting               | Example                             | Purpose                                                    |
+| --------------------- | ----------------------------------- | ---------------------------------------------------------- |
+| `BASE_PATH`           | `/wrapped/`                         | Prefix for the pages and the API. Same value as the build. |
+| `STATIC_DIR`          | `/home/you/jellyfin-wrapped/dist`   | Serve the built pages from this server.                    |
+| `PUBLIC_JELLYFIN_URL` | `https://you.host.usbx.me/jellyfin` | Jellyfin as browsers reach it, if different.               |
+| `TRUST_PROXY_HOPS`    | `1`                                 | One reverse proxy (the host's nginx) in front.             |
 
 Nginx forwards the whole path, prefix included:
 
@@ -159,12 +165,12 @@ location /wrapped/ {
 If the host caps each process's virtual memory (check `ulimit -v`; Ultra.cc allows
 about 9.5 GB), also set:
 
-| Setting | Why |
-| --- | --- |
-| `LOW_MEMORY=1` | Per-user query databases use SQLite compiled to plain JavaScript. The WebAssembly build reserves ~2 GB of address space per user; this one ~50 MB. Queries are slower (still well under a second for personal stats). |
-| `MALLOC_ARENA_MAX=2` | Stops each thread reserving its own 64 MB memory pool. |
-| `NODE_OPTIONS=--disable-wasm-trap-handler` | Stops Node's built-in `fetch` reserving ~10 GB for WebAssembly. |
-| `MAX_CACHED_USERS=25` | Keeps the number of open per-user databases bounded. |
+| Setting                                    | Why                                                                                                                                                                                                                   |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LOW_MEMORY=1`                             | Per-user query databases use SQLite compiled to plain JavaScript. The WebAssembly build reserves ~2 GB of address space per user; this one ~50 MB. Queries are slower (still well under a second for personal stats). |
+| `MALLOC_ARENA_MAX=2`                       | Stops each thread reserving its own 64 MB memory pool.                                                                                                                                                                |
+| `NODE_OPTIONS=--disable-wasm-trap-handler` | Stops Node's built-in `fetch` reserving ~10 GB for WebAssembly.                                                                                                                                                       |
+| `MAX_CACHED_USERS=25`                      | Keeps the number of open per-user databases bounded.                                                                                                                                                                  |
 
 Build the frontend there with the same two variables:
 `MALLOC_ARENA_MAX=2 NODE_OPTIONS=--disable-wasm-trap-handler BASE_PATH=/wrapped/ npm run build`

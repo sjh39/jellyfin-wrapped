@@ -38,6 +38,10 @@ export interface Config {
   librarySyncMs: number;
   /** Optional TMDB key (v3 key or v4 read token) for finding posters of deleted items. */
   tmdbApiKey: string | undefined;
+  /** Optional Seerr address and API key for request counts. If unset, the ones in the
+   *  Jellyfin Enhanced plugin's settings are used. */
+  seerrUrl: string | undefined;
+  seerrApiKey: string | undefined;
   /** Path prefix everything is served under, e.g. "/wrapped/". Always starts and ends with "/". */
   basePath: string;
   /** If set, this server also serves the built frontend from this folder. */
@@ -163,6 +167,8 @@ export function loadConfig(
     librarySyncMs:
       intFromEnv(env, "LIBRARY_SYNC_MINUTES", 60, 5, 10080) * 60 * 1000,
     tmdbApiKey: readOptionalSecret(env, "TMDB_API_KEY", readFile),
+    seerrUrl: env.SEERR_URL?.replace(/\/+$/, "") || undefined,
+    seerrApiKey: readOptionalSecret(env, "SEERR_API_KEY", readFile),
     basePath: normalizeBasePath(env.BASE_PATH),
     staticDir: env.STATIC_DIR || undefined,
     publicJellyfinUrl: (env.PUBLIC_JELLYFIN_URL || jellyfinUrl).replace(

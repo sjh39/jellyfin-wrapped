@@ -248,6 +248,7 @@ describe("deleted items end to end", () => {
   let syncer: Syncer;
   let dir: string;
   let movieDeleted = false;
+  let jellyfinUrl = "";
 
   before(async () => {
     dir = mkdtempSync(join(tmpdir(), "wrapped-archive-"));
@@ -323,10 +324,48 @@ describe("deleted items end to end", () => {
           total: 3,
         });
       }
+      if (url.pathname === "/System/ActivityLog/Entries") {
+        assert.equal(url.searchParams.get("type"), "UserDownloadingContent");
+        // The same item logged twice (phone apps do this) counts once.
+        return json({
+          Items: [
+            { UserId: U1, ItemId: MOVIE, Date: "2025-03-02T20:00:00Z" },
+            { UserId: U1, ItemId: MOVIE, Date: "2025-03-02T20:00:01Z" },
+            { UserId: U2, ItemId: MOVIE, Date: "2025-03-03T20:00:00Z" },
+            { UserId: U2, ItemId: EP_GONE, Date: "2025-03-03T20:00:00Z" },
+          ],
+        });
+      }
+      if (url.pathname === "/Plugins")
+        return json([
+          { Id: "e0000000000000000000000000000001", Name: "Jellyfin Enhanced" },
+        ]);
+      if (
+        url.pathname ===
+        "/Plugins/e0000000000000000000000000000001/Configuration"
+      )
+        return json({
+          JellyseerrEnabled: true,
+          JellyseerrUrls: `${jellyfinUrl}/seerr/`,
+          JellyseerrApiKey: "seerr-key",
+        });
+      if (url.pathname === "/seerr/api/v1/request") {
+        assert.equal(req.headers["x-api-key"], "seerr-key");
+        return json({
+          results: [1, 2, 3].map((id) => ({
+            id,
+            createdAt: "2025-03-04T10:00:00.000Z",
+            requestedBy: { jellyfinUserId: id === 1 ? U1 : U2 },
+          })),
+        });
+      }
       if (url.pathname === "/Library/VirtualFolders")
         return json([{ ItemId: LIB_MOVIES, Name: "Movies" }]);
       if (url.pathname === "/Users")
-        return json([{ Id: U1, Policy: { EnableAllFolders: true } }]);
+        return json([
+          { Id: U1, Name: "u1", Policy: { EnableAllFolders: true } },
+          { Id: U2, Name: "u2", Policy: { EnableAllFolders: true } },
+        ]);
       if (url.pathname === "/Items")
         return json({ Items: movieDeleted ? [] : [movie] });
       if (url.pathname === `/Items/${MOVIE}/Images/Primary` && !movieDeleted) {
@@ -337,7 +376,7 @@ describe("deleted items end to end", () => {
       res.end();
     });
     await new Promise<void>((r) => jellyfin.listen(0, "127.0.0.1", r));
-    const jellyfinUrl = `http://127.0.0.1:${(jellyfin.address() as AddressInfo).port}`;
+    jellyfinUrl = `http://127.0.0.1:${(jellyfin.address() as AddressInfo).port}`;
     const config: Config = {
       jellyfinUrl,
       apiKey: "admin",
@@ -358,6 +397,8 @@ describe("deleted items end to end", () => {
       playSyncMs: 60000,
       librarySyncMs: 600000,
       tmdbApiKey: undefined,
+      seerrUrl: undefined,
+      seerrApiKey: undefined,
       basePath: "/",
       staticDir: undefined,
       publicJellyfinUrl: jellyfinUrl,
@@ -462,6 +503,35 @@ describe("deleted items end to end", () => {
       Reviews: unknown[];
     };
     assert.equal(outside.Reviews.length, 0);
+  });
+
+  it("serves every user's totals, numbers only", async () => {
+    const res = await get("/api/leaderboard?start=2025-01-01&end=2026-01-01");
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { Users: Record<string, unknown>[] };
+    assert.deepEqual(body.Users, [
+      {
+        Name: "u1",
+        You: true,
+        Downloads: 1,
+        Requests: 1,
+        MovieSeconds: 3600,
+        ShowSeconds: 0,
+      },
+      {
+        Name: "u2",
+        You: false,
+        Downloads: 2,
+        Requests: 2,
+        MovieSeconds: 0,
+        ShowSeconds: 0,
+      },
+    ]);
+    const outside = (await (
+      await get("/api/leaderboard?start=2026-01-01&end=2027-01-01")
+    ).json()) as { Users: unknown[] };
+    assert.deepEqual(outside.Users, []);
+    assert.equal((await get("/api/leaderboard?start=x&end=y")).status, 400);
   });
 
   it("refuses images and items without a valid login", async () => {

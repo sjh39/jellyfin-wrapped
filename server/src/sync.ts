@@ -3,12 +3,17 @@
 //   library   every LIBRARY_SYNC_MINUTES (all items in every library, who can see which
 //             library, and marks items that disappeared as deleted)
 //   reviews   with each library pass, star ratings from the Jellyfin Enhanced plugin
+//   downloads with each plays pass, from Jellyfin's activity log
+//   requests  with each library pass, from Seerr (SEERR_URL, or the address and key
+//             already set in the Jellyfin Enhanced plugin)
 //   posters   after each pass, saves Jellyfin's poster for played items, movies and shows
 import {
   compactItem,
   type Archive,
   type ArchivedItem,
+  type DownloadEntry,
   type PluginReview,
+  type SeerrRequest,
 } from "./archive.js";
 import { isGuid, UpstreamError, type JellyfinClient } from "./jellyfin.js";
 import type { ImageStore } from "./images.js";
@@ -17,6 +22,9 @@ import { logEvent } from "./limits.js";
 const PAGE_SIZE = 500;
 const IDS_PER_REQUEST = 100;
 const REVIEWS_PAGE = 1000;
+const DOWNLOADS_PAGE = 1000;
+const REQUESTS_PAGE = 100;
+const SEERR_TIMEOUT_MS = 30000;
 const IMAGES_PER_PASS = 500;
 const IMAGE_CONCURRENCY = 4;
 /** Re-read plays a little before the newest archived one, in case rows were updated. */
@@ -34,12 +42,32 @@ interface ReviewsPage {
   reviews?: PluginReview[];
   total?: number;
 }
+interface ActivityPage {
+  Items?: DownloadEntry[];
+}
+interface SeerrPage {
+  results?: SeerrRequest[];
+}
+interface PluginInfo {
+  Id?: string;
+  Name?: string;
+}
+interface EnhancedConfig {
+  JellyseerrEnabled?: boolean;
+  JellyseerrUrls?: string;
+  JellyseerrApiKey?: string;
+}
+export interface SeerrSettings {
+  url: string;
+  apiKey: string;
+}
 interface VirtualFolder {
   ItemId?: string;
   Name?: string;
 }
 interface JellyfinUserDto {
   Id?: string;
+  Name?: string;
   Policy?: {
     EnableAllFolders?: boolean;
     EnabledFolders?: string[];
@@ -62,7 +90,12 @@ export class Syncer {
     private readonly archive: Archive,
     private readonly jellyfin: JellyfinClient,
     private readonly images: ImageStore,
-    private readonly options: { playSyncMs: number; librarySyncMs: number }
+    private readonly options: {
+      playSyncMs: number;
+      librarySyncMs: number;
+      /** Seerr to read requests from. Without it, Jellyfin Enhanced's settings are used. */
+      seerr?: SeerrSettings;
+    }
   ) {}
 
   start(): void {
@@ -140,6 +173,7 @@ export class Syncer {
       }
     }
     logEvent("sync_plays", { rows: count });
+    await this.syncDownloads();
     await this.saveImages();
   }
 
@@ -171,15 +205,18 @@ export class Syncer {
     await this.syncUserAccess();
     logEvent("sync_library", { items: total, newlyDeleted: deleted });
     await this.syncReviews();
+    await this.syncRequests();
     await this.saveImages();
   }
 
   private async syncUserAccess(): Promise<void> {
     const users = await this.jellyfin.adminGet<JellyfinUserDto[]>("/Users");
     const access = new Map<string, string[]>();
+    const names = new Map<string, string>();
     for (const user of users) {
       if (!user.Id || !isGuid(user.Id) || user.Policy?.IsDisabled) continue;
       const id = user.Id.replace(/-/g, "").toLowerCase();
+      if (user.Name) names.set(id, user.Name);
       access.set(
         id,
         user.Policy?.EnableAllFolders
@@ -190,6 +227,73 @@ export class Syncer {
       );
     }
     this.archive.setUserLibraries(access);
+    this.archive.setUserNames(names);
+  }
+
+  /** New download entries from the activity log. A failure leaves the archive as it is. */
+  private async syncDownloads(): Promise<void> {
+    const latest = this.archive.latestDownloadDate();
+    const latestMs = latest ? Date.parse(latest) : NaN;
+    const since = Number.isFinite(latestMs)
+      ? `&minDate=${new Date(latestMs - PLAY_OVERLAP_MS).toISOString()}`
+      : "";
+    try {
+      let added = 0;
+      for (let start = 0; ; start += DOWNLOADS_PAGE) {
+        const page = await this.jellyfin.adminGet<ActivityPage>(
+          `/System/ActivityLog/Entries?type=UserDownloadingContent${since}` +
+            `&startIndex=${start}&limit=${DOWNLOADS_PAGE}`
+        );
+        added += this.archive.upsertDownloads(page.Items ?? []);
+        if ((page.Items ?? []).length < DOWNLOADS_PAGE) break;
+      }
+      logEvent("sync_downloads", { added });
+    } catch (error) {
+      logEvent("sync_downloads_failed", { error: String(error) });
+    }
+  }
+
+  /** Seerr's address and key: from the settings, or from the Jellyfin Enhanced plugin. */
+  private async seerrSettings(): Promise<SeerrSettings | null> {
+    if (this.options.seerr) return this.options.seerr;
+    const plugins = await this.jellyfin.adminGet<PluginInfo[]>("/Plugins");
+    const enhanced = plugins.find((p) => p.Name === "Jellyfin Enhanced");
+    if (!enhanced?.Id || !isGuid(enhanced.Id)) return null;
+    const config = await this.jellyfin.adminGet<EnhancedConfig>(
+      `/Plugins/${enhanced.Id}/Configuration`
+    );
+    const url = (config.JellyseerrUrls ?? "")
+      .split(/[\s,]+/)
+      .find((u) => /^https?:\/\//.test(u));
+    if (!config.JellyseerrEnabled || !url || !config.JellyseerrApiKey)
+      return null;
+    return { url: url.replace(/\/+$/, ""), apiKey: config.JellyseerrApiKey };
+  }
+
+  /** Every Seerr request. Without Seerr, or if it fails, the archived ones are kept. */
+  private async syncRequests(): Promise<void> {
+    try {
+      const seerr = await this.seerrSettings();
+      if (!seerr) return;
+      let count = 0;
+      for (let skip = 0; ; skip += REQUESTS_PAGE) {
+        const response = await fetch(
+          `${seerr.url}/api/v1/request?take=${REQUESTS_PAGE}&skip=${skip}&filter=all&sort=added`,
+          {
+            headers: { "X-Api-Key": seerr.apiKey, Accept: "application/json" },
+            signal: AbortSignal.timeout(SEERR_TIMEOUT_MS),
+          }
+        );
+        if (!response.ok)
+          throw new UpstreamError(`Seerr returned ${response.status}`);
+        const results = ((await response.json()) as SeerrPage).results ?? [];
+        count += this.archive.upsertRequests(results);
+        if (results.length < REQUESTS_PAGE) break;
+      }
+      logEvent("sync_requests", { requests: count });
+    } catch (error) {
+      logEvent("sync_requests_failed", { error: String(error) });
+    }
   }
 
   /**

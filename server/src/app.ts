@@ -292,6 +292,31 @@ export function createApp({
     });
   }
 
+  /**
+   * GET /api/leaderboard?start=YYYY-MM-DD&end=YYYY-MM-DD -> every user's totals
+   * (downloads, requests, movie and TV time). Names and numbers only, never titles.
+   */
+  async function handleLeaderboard(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    url: URL
+  ): Promise<void> {
+    const services = requireArchive();
+    const user = await authenticateLimited(req, userLimiter);
+    const start = url.searchParams.get("start") ?? "";
+    const end = url.searchParams.get("end") ?? "";
+    if (!DATE_PARAM.test(start) || !DATE_PARAM.test(end)) {
+      throw new HttpError(400, "start and end must be YYYY-MM-DD");
+    }
+    sendJson(res, 200, {
+      Users: services.archive.leaderboard(
+        user.id.replace(/-/g, "").toLowerCase(),
+        start,
+        end
+      ),
+    });
+  }
+
   /** GET /api/image/<id> -> saved poster, found again from Jellyfin or outside if needed. */
   async function handleImage(
     req: http.IncomingMessage,
@@ -377,6 +402,12 @@ export function createApp({
         if (req.method !== "GET")
           throw new HttpError(405, "Method not allowed");
         await handleReviews(req, res, url);
+        return;
+      }
+      if (path === "/api/leaderboard") {
+        if (req.method !== "GET")
+          throw new HttpError(405, "Method not allowed");
+        await handleLeaderboard(req, res, url);
         return;
       }
       if (path.startsWith("/api/image/")) {

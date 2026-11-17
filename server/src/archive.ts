@@ -34,6 +34,36 @@ export interface PluginReview {
   updatedAt?: string | null;
 }
 
+/** One activity-log entry of a user downloading an item. */
+export interface DownloadEntry {
+  UserId?: string | null;
+  ItemId?: string | null;
+  Date?: string | null;
+}
+
+/** One Seerr request, reduced to who made it and when. */
+export interface SeerrRequest {
+  id?: number | null;
+  createdAt?: string | null;
+  requestedBy?: { jellyfinUserId?: string | null } | null;
+}
+
+/** One user's totals for the whole-server slides. Numbers only, never titles. */
+export interface LeaderboardRow {
+  Name: string;
+  You: boolean;
+  Downloads: number;
+  Requests: number;
+  MovieSeconds: number;
+  ShowSeconds: number;
+}
+
+const normalizeId = (v: unknown): string | null => {
+  if (typeof v !== "string") return null;
+  const id = v.replace(/-/g, "").toLowerCase();
+  return /^[0-9a-f]{32}$/.test(id) ? id : null;
+};
+
 export interface ReviewForUser {
   Rating: number | null;
   Content: string | null;
@@ -242,6 +272,28 @@ export class Archive {
         CreatedAt TEXT,
         UpdatedAt TEXT,
         PRIMARY KEY (UserId, MediaType, TmdbKey)
+      );
+
+      -- Downloads from Jellyfin's activity log, which drops entries after its retention.
+      CREATE TABLE IF NOT EXISTS downloads (
+        UserId TEXT NOT NULL,
+        ItemId TEXT NOT NULL,
+        Date TEXT NOT NULL,
+        PRIMARY KEY (UserId, ItemId, Date)
+      );
+
+      -- Requests made in Seerr, by Seerr's request id. Kept after Seerr deletes them
+      -- (it does when their media is removed).
+      CREATE TABLE IF NOT EXISTS requests (
+        Id INTEGER PRIMARY KEY,
+        UserId TEXT NOT NULL,
+        CreatedAt TEXT NOT NULL
+      );
+
+      -- Display names of the current, enabled Jellyfin users.
+      CREATE TABLE IF NOT EXISTS users (
+        Id TEXT PRIMARY KEY,
+        Name TEXT NOT NULL
       );
     `);
   }
@@ -727,6 +779,94 @@ export class Archive {
       });
     }
     return out;
+  }
+
+  // ---- whole-server totals ----------------------------------------------
+
+  /** Copy download entries in. An entry already archived is not counted twice. */
+  upsertDownloads(entries: DownloadEntry[]): number {
+    const insert = this.db.prepare(
+      "INSERT OR IGNORE INTO downloads (UserId, ItemId, Date) VALUES (?, ?, ?)"
+    );
+    let count = 0;
+    this.transaction(() => {
+      for (const e of entries) {
+        const user = normalizeId(e.UserId);
+        const item = normalizeId(e.ItemId);
+        if (!user || !item || typeof e.Date !== "string") continue;
+        count += Number(insert.run(user, item, e.Date).changes);
+      }
+    });
+    return count;
+  }
+
+  latestDownloadDate(): string | null {
+    return str(
+      this.db.prepare("SELECT MAX(Date) AS d FROM downloads").get()?.d
+    );
+  }
+
+  /** Copy Seerr requests in. Requests Seerr has since deleted stay archived. */
+  upsertRequests(requests: SeerrRequest[]): number {
+    const insert = this.db.prepare(
+      `INSERT INTO requests (Id, UserId, CreatedAt) VALUES (?, ?, ?)
+       ON CONFLICT(Id) DO UPDATE SET UserId = excluded.UserId, CreatedAt = excluded.CreatedAt`
+    );
+    let count = 0;
+    this.transaction(() => {
+      for (const r of requests) {
+        const user = normalizeId(r.requestedBy?.jellyfinUserId);
+        if (!user || !Number.isInteger(r.id) || typeof r.createdAt !== "string")
+          continue;
+        insert.run(r.id!, user, r.createdAt);
+        count++;
+      }
+    });
+    return count;
+  }
+
+  setUserNames(names: Map<string, string>): void {
+    const insert = this.db.prepare(
+      "INSERT INTO users (Id, Name) VALUES (?, ?)"
+    );
+    this.transaction(() => {
+      this.db.exec("DELETE FROM users");
+      for (const [id, name] of names) insert.run(id, name);
+    });
+  }
+
+  /**
+   * Every current user's totals in a date range (end exclusive): distinct items
+   * downloaded, Seerr requests, and seconds of movies and of TV episodes played.
+   * Users with nothing at all are left out.
+   */
+  leaderboard(viewerId: string, start: string, end: string): LeaderboardRow[] {
+    const range = (col: string) => `${col} >= $start AND ${col} < $end`;
+    return this.db
+      .prepare(
+        `SELECT u.Id, u.Name,
+           (SELECT COUNT(DISTINCT d.ItemId) FROM downloads d
+             WHERE d.UserId = u.Id AND ${range("d.Date")}) AS Downloads,
+           (SELECT COUNT(*) FROM requests r
+             WHERE r.UserId = u.Id AND ${range("r.CreatedAt")}) AS Requests,
+           (SELECT COALESCE(SUM(p.PlayDuration), 0) FROM plays p
+             WHERE p.UserId = u.Id AND p.ItemType = 'Movie' AND ${range("p.DateCreated")}) AS MovieSeconds,
+           (SELECT COALESCE(SUM(p.PlayDuration), 0) FROM plays p
+             WHERE p.UserId = u.Id AND p.ItemType = 'Episode' AND ${range("p.DateCreated")}) AS ShowSeconds
+         FROM users u`
+      )
+      .all({ start, end })
+      .map((r) => ({
+        Name: String(r.Name),
+        You: r.Id === viewerId,
+        Downloads: Number(r.Downloads),
+        Requests: Number(r.Requests),
+        MovieSeconds: Number(r.MovieSeconds),
+        ShowSeconds: Number(r.ShowSeconds),
+      }))
+      .filter(
+        (r) => r.Downloads + r.Requests + r.MovieSeconds + r.ShowSeconds > 0
+      );
   }
 
   personName(id: string): string | null {

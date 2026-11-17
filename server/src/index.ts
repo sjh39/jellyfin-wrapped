@@ -13,10 +13,19 @@ const jellyfin = new JellyfinClient(config);
 // The permanent archive: plays and items are copied here so a year's Wrapped
 // still includes things the plugin has aged out or that were deleted from Jellyfin.
 const archive = new Archive(join(config.archiveDir, "archive.sqlite"));
-const images = new ImageStore(archive, jellyfin, config.archiveDir, config.tmdbApiKey);
+const images = new ImageStore(
+  archive,
+  jellyfin,
+  config.archiveDir,
+  config.tmdbApiKey
+);
 const syncer = new Syncer(archive, jellyfin, images, {
   playSyncMs: config.playSyncMs,
   librarySyncMs: config.librarySyncMs,
+  seerr:
+    config.seerrUrl && config.seerrApiKey
+      ? { url: config.seerrUrl, apiKey: config.seerrApiKey }
+      : undefined,
 });
 
 // Optional: serve the web pages too (hosts without Docker/Apache, e.g. Ultra.cc).

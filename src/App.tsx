@@ -32,6 +32,8 @@ import TopRatedPage from "./components/pages/TopRatedPage";
 import VsCriticsPage from "./components/pages/VsCriticsPage";
 import CriticProfilePage from "./components/pages/CriticProfilePage";
 import CreditsPage from "./components/pages/CreditsPage";
+import WhoWatchedPage from "./components/pages/WhoWatchedPage";
+import WhoAskedPage from "./components/pages/WhoAskedPage";
 import { useEffect } from "react";
 import ActivityCalendarPage from "./components/pages/ActivityCalendarPage";
 import { ErrorScreen } from "./components/ErrorScreen";
@@ -137,6 +139,14 @@ const router = createBrowserRouter(
         {
           path: "/you-the-critic",
           element: <CriticProfilePage />,
+        },
+        {
+          path: "/who-watched",
+          element: <WhoWatchedPage />,
+        },
+        {
+          path: "/who-asked",
+          element: <WhoAskedPage />,
         },
         {
           path: "/credits",

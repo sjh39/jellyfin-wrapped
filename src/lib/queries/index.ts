@@ -48,3 +48,6 @@ export * from "./new-this-year";
 
 // Ratings (Jellyfin Enhanced)
 export * from "./reviews";
+
+// Whole-server totals per user
+export * from "./leaderboard";

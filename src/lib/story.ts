@@ -37,6 +37,8 @@ export const CHAPTERS: Chapter[] = [
   { path: "/unfinished-shows", name: "Unfinished shows", tone: "tomato" },
   { path: "/device-stats", name: "Devices", tone: "mint" },
   { path: "/punch-card", name: "Activity calendar", tone: "ink" },
+  { path: "/who-watched", name: "Who watched the most", tone: "marigold" },
+  { path: "/who-asked", name: "Requests and downloads", tone: "cobalt" },
   { path: "/credits", name: "About and credits", tone: "chalk" },
 ];
 

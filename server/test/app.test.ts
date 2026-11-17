@@ -43,6 +43,8 @@ describe("playback report proxy", () => {
       playSyncMs: 60000,
       librarySyncMs: 600000,
       tmdbApiKey: undefined,
+      seerrUrl: undefined,
+      seerrApiKey: undefined,
       basePath: "/",
       staticDir: undefined,
       publicJellyfinUrl: jellyfinUrl,
