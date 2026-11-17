@@ -138,6 +138,7 @@ export const getDeviceStats = async (): Promise<{
   WHERE UserId = '${userId}'
   AND DateCreated > '${formatDateForSql(startDate)}'
   AND DateCreated <= '${formatEndDateForSql(endDate)}'
+  AND COALESCE(DeviceName, '') <> ''
   GROUP BY DeviceName
   ORDER BY TotalPlayDuration DESC
   `;
@@ -158,6 +159,7 @@ export const getDeviceStats = async (): Promise<{
   WHERE UserId = '${userId}'
   AND DateCreated > '${formatDateForSql(startDate)}'
   AND DateCreated <= '${formatEndDateForSql(endDate)}'
+  AND COALESCE(DeviceName, '') <> ''
   GROUP BY BrowserName
   ORDER BY TotalPlayDuration DESC
   `;
@@ -177,6 +179,7 @@ export const getDeviceStats = async (): Promise<{
   WHERE UserId = '${userId}'
   AND DateCreated > '${formatDateForSql(startDate)}'
   AND DateCreated <= '${formatEndDateForSql(endDate)}'
+  AND COALESCE(DeviceName, '') <> ''
   GROUP BY OSName
   ORDER BY TotalPlayDuration DESC
   `;

@@ -172,12 +172,12 @@ for (const e of playback) {
   }
   const started = openStarts.get(key);
   openStarts.delete(key);
-  logPlays.push({
-    user: e.user,
-    item: e.item,
-    start: started ?? null,
-    stop: e.at,
-  });
+  // A stop with no start says nothing about how long was watched. Some clients log a
+  // stop every time they restart the stream (hundreds per film), and counting each as
+  // the full runtime invented hundreds of hours. Finished items still come in below,
+  // from the watch state.
+  if (started === undefined) continue;
+  logPlays.push({ user: e.user, item: e.item, start: started, stop: e.at });
 }
 
 // Item details (type, name, runtime) for everything the log mentions.
@@ -200,11 +200,9 @@ for (const p of logPlays) {
   if (!item || !ITEM_TYPES.split(",").includes(item.Type)) continue;
   const full = runtimeSeconds(item);
   // Pauses make stop - start longer than the watch, so never count more than the runtime.
-  const watched = p.start ? Math.round((p.stop - p.start) / 1000) : full;
+  const watched = Math.round((p.stop - p.start) / 1000);
   const seconds = full ? Math.min(watched, full) : watched;
-  const date = toPluginDate(
-    new Date(p.start ?? p.stop - seconds * 1000).toISOString()
-  );
+  const date = toPluginDate(new Date(p.start).toISOString());
   if (!inRange(date) || seconds < 60) continue;
   rows.push({ date, user: p.user, item, seconds, source: "activity log" });
   seen.add(`${p.user}|${p.item}`);
